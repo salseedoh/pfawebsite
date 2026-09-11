@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Paws Prepared Academy pet first aid and CPR courses." />
+    <title>Paws Prepared Academy | Pet First Aid & CPR</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Paws Prepared Academy home"><img src="logo.png" alt="Paws Prepared Academy" /></a>
+      <button class="menu-button" aria-label="Open menu" aria-expanded="false">☰</button>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="#classes">Classes</a><a href="#why-us">Why us</a><a href="#kits">First aid kits</a><a href="#admin">Admin</a>
+        <a class="button button-small" href="#classes">Find a class</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Pet first aid & CPR education</p>
+          <h1>Be their calm in an emergency.</h1>
+          <p class="lead">Practical, compassionate pet first aid courses that help you recognize an emergency, respond with confidence, and care for the animals who count on you.</p>
+          <div class="hero-actions"><a class="button" href="#classes">View upcoming classes</a><a class="text-link" href="#why-us">How it works <span>→</span></a></div>
+          <div class="trust-row"><span>✓ Hands-on learning</span><span>✓ Completion certificate</span><span>✓ Small classes</span></div>
+        </div>
+        <div class="hero-art" aria-hidden="true"><div class="cross">+</div><div class="paw paw-one">●</div><div class="paw paw-two">●</div><div class="paw paw-three">●</div><div class="paw paw-four">●</div><div class="paw-pad">●</div><p>Ready for every<br />wag, purr &amp; whinny.</p></div>
+      </section>
+
+      <section class="intro-strip"><p>For pet parents, animal professionals, and anyone who wants to be ready when it matters most.</p></section>
+
+      <section class="section classes-section" id="classes">
+        <div class="section-heading"><div><p class="eyebrow">Learn lifesaving skills</p><h2>Upcoming classes</h2></div><p>Choose a date that works for you. Each course includes practical instruction and a certificate of completion.</p></div>
+        <div class="class-grid" id="class-list"></div>
+      </section>
+
+      <section class="section how-section" id="why-us">
+        <div class="section-heading centered"><p class="eyebrow">A clear path to confidence</p><h2>Learn. Practice. Feel prepared.</h2></div>
+        <div class="steps"><article><span>01</span><h3>Pick your class</h3><p>Find a beginner-friendly course near you and reserve your seat online.</p></article><article><span>02</span><h3>Learn by doing</h3><p>Practice key skills with expert instruction in a supportive small-group setting.</p></article><article><span>03</span><h3>Take confidence home</h3><p>Leave with a completion certificate and the know-how to act when it counts.</p></article></div>
+      </section>
+
+      <section class="section kits-section" id="kits"><div class="kit-copy"><p class="eyebrow">Build your readiness kit</p><h2>Everything in reach when every second matters.</h2><p>Our pet first aid kit is thoughtfully assembled for everyday accidents and unexpected emergencies. Add one to your course registration, or shop it on its own soon.</p><ul><li>Pet-safe essentials</li><li>Simple, labeled organization</li><li>Course-friendly quick reference guide</li></ul></div><div class="kit-card"><div class="kit-icon">✚</div><p class="eyebrow">Coming to class?</p><h3>Add a first aid kit</h3><p class="kit-price">$34 <small>demo price</small></p><a class="text-link" href="#classes">Add during registration <span>→</span></a></div></section>
+
+      <section class="section testimonial"><blockquote>“I left feeling much more prepared to help my own pets—and the animals in my care.”</blockquote><p>— A future Paws Prepared Academy graduate</p></section>
+
+      <section class="cta"><p class="eyebrow">Your pets deserve a prepared you</p><h2>Make the next right step.</h2><a class="button button-light" href="#classes">Reserve your spot</a></section>
+
+      <section class="registration-modal" id="registration" aria-hidden="true"><div class="modal-backdrop" data-close></div><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="registration-title"><button class="close-button" data-close aria-label="Close registration">×</button><div id="registration-content"></div></div></section>
+
+      <section class="admin-section" id="admin"><div class="admin-login" id="admin-login"><p class="eyebrow">For Paws Prepared Academy</p><h2>Admin dashboard</h2><p>Review course registrations and export them in the format needed for ProTrainings.</p><form id="login-form"><label>Email<input type="email" value="bobbuilder2786@yahoo.com" required /></label><label>Password<input type="password" placeholder="Enter password" required /></label><button class="button" type="submit">Open dashboard</button><p class="form-note">Demo only. Secure access will be connected through Cloudflare before launch.</p></form></div><div class="dashboard hidden" id="dashboard"><div class="dashboard-top"><div><p class="eyebrow">Admin dashboard</p><h2>Upcoming classes</h2></div><button class="text-button" id="log-out">Log out</button></div><div class="dashboard-grid"><article class="class-summary"><p class="date-label">Friday · October 17</p><h3>Pet First Aid & CPR</h3><p>Community Learning Center · 10:00 AM</p><div class="seat-bar"><span style="width:42%"></span></div><p><strong>12 seats</strong> · 5 reserved</p></article><article class="registration-summary"><p class="eyebrow">Registrations</p><strong id="registration-count">7</strong><p>students awaiting import</p><button class="button" id="download-csv">Generate ProTrainings CSV</button><p class="form-note">Sample registrations are included until the database is connected.</p></article></div><div class="registrant-table-wrap"><h3>Student registrations</h3><table><thead><tr><th>Name</th><th>Email</th><th>Language</th><th>Class</th></tr></thead><tbody id="registrant-table"></tbody></table></div></div></section>
+    </main>
+
+    <footer><img src="logo.png" alt="Paws Prepared Academy" /><p>Pet first aid education for brighter tomorrows.</p><p>© <span id="year"></span> Paws Prepared Academy</p></footer>
+    <script src="app.js"></script>
+  </body>
+</html>
