@@ -15,7 +15,7 @@
       <a class="brand" href="#top" aria-label="Paws Prepared Academy home"><img src="logo.png" alt="Paws Prepared Academy" /></a>
       <button class="menu-button" aria-label="Open menu" aria-expanded="false">☰</button>
       <nav class="site-nav" aria-label="Main navigation">
-        <a href="#classes">Classes</a><a href="#why-us">Why us</a><a href="#kits">First aid kits</a><a href="#admin">Admin</a>
+        <a href="#classes">Classes</a><a href="#why-us">Why us</a><a href="#kits">First aid kits</a><a href="admin.html">Admin</a>
         <a class="button button-small" href="#classes">Find a class</a>
       </nav>
     </header>
@@ -52,7 +52,6 @@
 
       <section class="registration-modal" id="registration" aria-hidden="true"><div class="modal-backdrop" data-close></div><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="registration-title"><button class="close-button" data-close aria-label="Close registration">×</button><div id="registration-content"></div></div></section>
 
-      <section class="admin-section" id="admin"><div class="admin-login" id="admin-login"><p class="eyebrow">For Paws Prepared Academy</p><h2>Admin dashboard</h2><p>Review course registrations and export them in the format needed for ProTrainings.</p><form id="login-form"><label>Email<input type="email" value="bobbuilder2786@yahoo.com" required /></label><label>Password<input type="password" placeholder="Enter password" required /></label><button class="button" type="submit">Open dashboard</button><p class="form-note">Demo only. Secure access will be connected through Cloudflare before launch.</p></form></div><div class="dashboard hidden" id="dashboard"><div class="dashboard-top"><div><p class="eyebrow">Admin dashboard</p><h2>Upcoming classes</h2></div><button class="text-button" id="log-out">Log out</button></div><div class="dashboard-grid"><article class="class-summary"><p class="date-label">Friday · October 17</p><h3>Pet First Aid & CPR</h3><p>Community Learning Center · 10:00 AM</p><div class="seat-bar"><span style="width:42%"></span></div><p><strong>12 seats</strong> · 5 reserved</p></article><article class="registration-summary"><p class="eyebrow">Registrations</p><strong id="registration-count">7</strong><p>students awaiting import</p><button class="button" id="download-csv">Generate ProTrainings CSV</button><p class="form-note">Sample registrations are included until the database is connected.</p></article></div><div class="registrant-table-wrap"><h3>Student registrations</h3><table><thead><tr><th>Name</th><th>Email</th><th>Language</th><th>Class</th></tr></thead><tbody id="registrant-table"></tbody></table></div></div></section>
     </main>
 
     <footer><img src="logo.png" alt="Paws Prepared Academy" /><p>Pet first aid education for brighter tomorrows.</p><p>© <span id="year"></span> Paws Prepared Academy</p></footer>
