@@ -9,6 +9,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <style>
+      .hero-art { background: #dceecb url("first-aid-dog.png") center / cover no-repeat; }
+      .hero-art > * { display: none; }
+      .hero-art::after { content: "Ready for every wag."; position: absolute; left: 9%; bottom: 9%; padding: .4em .65em; background: rgba(255,250,241,.88); color: #123e70; font: 600 clamp(1.35rem, 2.5vw, 2.35rem)/1.15 Fraunces, serif; }
+      .kit-card { position: relative; min-height: 420px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+      .kit-card::before { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 24%, #123e70 75%), url("first-aid-cat.png") top center / 125% auto no-repeat; opacity: .96; }
+      .kit-card > * { position: relative; z-index: 1; }
+      @media (max-width: 780px) { .kit-card { min-height: 380px; } .hero-art { min-height: 390px; } }
+    </style>
   </head>
   <body>
     <header class="site-header">
