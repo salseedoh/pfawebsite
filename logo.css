@@ -1,0 +1,30 @@
+/* Cropped vector logo sizing for the site header and footer. */
+.site-header {
+  height: 142px;
+}
+
+.brand img {
+  height: 118px;
+  width: auto;
+  max-width: 280px;
+}
+
+footer img {
+  width: 210px;
+  height: auto;
+}
+
+@media (max-width: 780px) {
+  .site-header {
+    height: 112px;
+  }
+
+  .brand img {
+    height: 92px;
+    max-width: 220px;
+  }
+
+  .site-nav {
+    top: 100px;
+  }
+}

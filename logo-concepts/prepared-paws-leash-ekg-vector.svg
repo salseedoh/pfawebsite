@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
+  <title id="title">Prepared Paws Pet First Aid and CPR Training</title>
+  <desc id="desc">Prepared Paws logo with a paw print and a leash that transitions to an EKG waveform.</desc>
+  <defs>
+    <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3479F5"/>
+      <stop offset="1" stop-color="#1662DD"/>
+    </linearGradient>
+    <linearGradient id="navy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#154A9E"/>
+      <stop offset="1" stop-color="#0E2D56"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="7" stdDeviation="5" flood-color="#0E2D56" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="1080" fill="#ffffff"/>
+
+  <!-- Main wordmark -->
+  <text x="800" y="225" text-anchor="middle" fill="url(#navy)" stroke="#0E2D56" stroke-width="2" paint-order="stroke" font-family="'Arial Rounded MT Bold', 'Trebuchet MS', Arial, sans-serif" font-size="182" font-weight="700" letter-spacing="-7" filter="url(#soft-shadow)">Prepared</text>
+  <g transform="translate(0 17)" filter="url(#soft-shadow)">
+    <text x="480" y="500" text-anchor="middle" fill="url(#blue)" stroke="#1662DD" stroke-width="2" paint-order="stroke" font-family="'Brush Script MT', 'Segoe Script', cursive" font-size="258" font-weight="700" letter-spacing="-20">P</text>
+    <!-- Paw takes the place of the central character treatment in Paws. -->
+    <g fill="url(#blue)" stroke="#1662DD" stroke-width="2" transform="translate(733 420)">
+      <ellipse cx="0" cy="63" rx="63" ry="49"/>
+      <ellipse cx="-65" cy="8" rx="24" ry="35" transform="rotate(-26 -65 8)"/>
+      <ellipse cx="-23" cy="-26" rx="24" ry="35" transform="rotate(-7 -23 -26)"/>
+      <ellipse cx="25" cy="-26" rx="24" ry="35" transform="rotate(8 25 -26)"/>
+      <ellipse cx="67" cy="8" rx="24" ry="35" transform="rotate(27 67 8)"/>
+    </g>
+    <text x="1052" y="500" text-anchor="middle" fill="url(#blue)" stroke="#1662DD" stroke-width="2" paint-order="stroke" font-family="'Brush Script MT', 'Segoe Script', cursive" font-size="258" font-weight="700" letter-spacing="-20">ws</text>
+  </g>
+
+  <!-- Leash divider: metal snap hook on the left, lead evolving into a heartbeat on the right. -->
+  <g transform="translate(0 0)" filter="url(#soft-shadow)">
+    <g fill="none" stroke="#697789" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M112 655c-57-11-76 70-23 84 46 12 69-42 39-66-22-18-52-2-47 24"/>
+      <path d="M127 698h78"/>
+    </g>
+    <rect x="194" y="672" width="73" height="48" rx="16" fill="#AAB4C1" stroke="#657083" stroke-width="9"/>
+    <rect x="258" y="678" width="52" height="36" rx="11" fill="url(#blue)"/>
+    <path d="M306 696C585 670 941 665 1203 687c34 3 58 5 78 7" fill="none" stroke="url(#blue)" stroke-width="25" stroke-linecap="round"/>
+    <path d="M1281 694h23l27-16 25 75 32-126 34 107 29-47 52 7h54" fill="none" stroke="url(#blue)" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Supporting copy -->
+  <text x="800" y="858" text-anchor="middle" fill="url(#navy)" font-family="'Arial Rounded MT Bold', 'Trebuchet MS', Arial, sans-serif" font-size="69" font-weight="700" letter-spacing="-1">Pet First Aid &amp; CPR Training</text>
+  <g stroke="url(#blue)" stroke-width="8" stroke-linecap="round">
+    <path d="M142 970h174"/>
+    <path d="M1284 970h174"/>
+  </g>
+  <text x="800" y="995" text-anchor="middle" fill="url(#blue)" font-family="'Brush Script MT', 'Segoe Script', cursive" font-size="60" font-weight="700">by Pet Pampering Plus</text>
+</svg>

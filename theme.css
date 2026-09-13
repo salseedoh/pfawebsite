@@ -1,0 +1,69 @@
+/* Prepared Paws palette: primary blue with navy depth and a warm complementary accent. */
+:root {
+  --ink: #102B5B;
+  --blue: #3479F5;
+  --sky: #EEF4FF;
+  --cream: #FCFDFF;
+  --orange: #F2A64B;
+  --green: #E3F3EA;
+  --text: #27466F;
+  --line: #D8E5FC;
+}
+
+body { background: var(--cream); }
+
+.button {
+  background: var(--blue);
+  box-shadow: 0 5px 0 rgba(16, 43, 91, .16);
+}
+
+.button:hover { background: #1E5FD2; }
+.class-card:hover { box-shadow: 0 12px 24px rgba(16, 43, 91, .09); }
+.modal-backdrop { background: rgba(16, 43, 91, .56); }
+.admin-section { background: var(--sky); }
+.form-note, footer { color: #5A7296; }
+.eyebrow { color: #3C6EB7; }
+.class-meta, th { color: #527197; }
+.kit-card .eyebrow { color: #BBD4FF; }
+
+/* A quiet footer acknowledgement for the organization that issues student certification. */
+.certification-partner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 190px;
+  color: #527197;
+  font-size: .73rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.certification-partner img {
+  width: 45px;
+  height: 45px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+/* Keep the footer compact while preserving each small brand acknowledgement. */
+footer {
+  padding: 20px 5%;
+  gap: 22px;
+}
+
+footer > img {
+  width: 135px;
+  height: auto;
+}
+
+@media (max-width: 780px) {
+  footer > img {
+    width: 125px;
+  }
+}
+
+/* The warm amber is the blue complement; it is reserved for supportive emphasis. */
+.date-label, .steps span, .kit-icon, .kit-copy li:before { color: var(--orange); }
+.seat-bar span { background: var(--orange); }
+.cta { background: #F0A34C; }
+.cta .eyebrow { color: #70451A; }
