@@ -27,3 +27,17 @@ CREATE TABLE IF NOT EXISTS registrations (
 
 CREATE INDEX IF NOT EXISTS registrations_class_id_idx ON registrations(class_id);
 CREATE INDEX IF NOT EXISTS registrations_payment_status_idx ON registrations(payment_status);
+
+CREATE TABLE IF NOT EXISTS kit_orders (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL DEFAULT 4000,
+  payment_status TEXT NOT NULL DEFAULT 'awaiting_payment' CHECK (payment_status IN ('awaiting_payment', 'paid', 'refunded', 'cancelled')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  paid_at TEXT,
+  notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS kit_orders_payment_status_idx ON kit_orders(payment_status);

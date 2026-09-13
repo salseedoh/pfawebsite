@@ -22,6 +22,8 @@ body { background: var(--cream); }
 .modal-backdrop { background: rgba(16, 43, 91, .56); }
 .admin-section { background: var(--sky); }
 .form-note, footer { color: #5A7296; }
+.form-error { color: #AD2E43; font-weight: 600; }
+.empty-state { grid-column: 1 / -1; color: #527197; }
 .eyebrow { color: #3C6EB7; }
 .class-meta, th { color: #527197; }
 .kit-card .eyebrow { color: #BBD4FF; }

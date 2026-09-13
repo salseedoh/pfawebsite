@@ -1,13 +1,25 @@
-# Paws Prepared Academy
+# Prepared Paws
 
-A GitHub Pages-ready starter site for Paws Prepared Academy, a pet first aid and CPR training business.
+GitHub Pages website for Prepared Paws pet first aid and CPR training.
 
-## Preview locally
+## Live registration system
 
-Open `index.html` in a browser.
+The website uses a Cloudflare Worker and D1 database for live classes, student registrations, payment-status tracking, and paid-student CSV exports.
 
-## Before going live
+Before the system is used, add these secrets in the Cloudflare Worker settings:
 
-The current checkout, admin sign-in, registration storage, and CSV export are front-end demonstrations only. Do not use this version to collect real payments or protect real student data.
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `SESSION_SECRET` (a new random value, at least 32 characters)
 
-For a live launch, connect the site to a Cloudflare Worker and D1 database for secure registration storage, Stripe Checkout, CSV export, and protected admin access.
+When Chase QuickAccept payment links are ready, add these secrets as well:
+
+- `CHASE_CLASS_LINK`
+- `CHASE_CLASS_KIT_LINK`
+- `CHASE_KIT_LINK`
+
+The Worker source and D1 schema are in [worker](worker/). It is configured to use the production Worker at `https://prepared-paws-api.salcido-heriberto.workers.dev`.
+
+## Publishing the website
+
+Commit and push the repository with GitHub Desktop. GitHub Pages then publishes the public site at `https://salseedoh.github.io/pfawebsite/`.

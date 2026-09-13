@@ -51,12 +51,25 @@ async function createRegistration(request, env) {
   if (!classId || !/^\S+@\S+\.\S+$/.test(email) || !firstName || !lastName) return error('Please provide an email, first name, and last name.');
   const course = await env.DB.prepare("SELECT * FROM classes WHERE id = ? AND status = 'open'").bind(classId).first();
   if (!course) return error('This class is no longer open for registration.', 404);
+  const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM registrations WHERE class_id = ? AND payment_status IN ('awaiting_payment', 'paid')").bind(classId).first();
+  if (count.count >= course.max_students) return error('This class is now full. Please choose another date.', 409);
   const amount = kitSelected ? course.class_with_kit_price_cents : course.class_price_cents;
   const registration = { id: id(), classId, email, firstName, lastName, language, kitSelected, amount };
   await env.DB.prepare('INSERT INTO registrations (id, class_id, email, first_name, last_name, language, kit_selected, amount_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(registration.id, classId, email, firstName, lastName, language, kitSelected ? 1 : 0, amount).run();
   const link = kitSelected ? env.CHASE_CLASS_KIT_LINK : env.CHASE_CLASS_LINK;
   return json({ registrationId: registration.id, paymentStatus: 'awaiting_payment', amount: amount / 100, paymentLink: link || null }, 201);
+}
+
+async function createKitOrder(request, env) {
+  const body = await request.json();
+  const email = clean(body.email).toLowerCase();
+  const firstName = clean(body.firstName);
+  const lastName = clean(body.lastName);
+  if (!/^\S+@\S+\.\S+$/.test(email) || !firstName || !lastName) return error('Please provide an email, first name, and last name.');
+  const order = { id: id(), email, firstName, lastName };
+  await env.DB.prepare('INSERT INTO kit_orders (id, email, first_name, last_name) VALUES (?, ?, ?, ?)').bind(order.id, email, firstName, lastName).run();
+  return json({ orderId: order.id, paymentStatus: 'awaiting_payment', amount: 40, paymentLink: env.CHASE_KIT_LINK || null }, 201);
 }
 
 async function adminLogin(request, env) {
@@ -70,10 +83,29 @@ async function adminLogin(request, env) {
 async function createClass(request, env) {
   const body = await request.json();
   const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), location: clean(body.location), classPrice: Number(body.classPrice || 125) * 100, classWithKitPrice: Number(body.classWithKitPrice || 150) * 100, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open') };
-  if (!course.title || !course.startsAt || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 1) return error('Please complete all class details.');
+  if (!course.title || !course.startsAt || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10) return error('Class size must be between 6 and 10 students.');
   await env.DB.prepare('INSERT INTO classes (id, title, starts_at, location, class_price_cents, class_with_kit_price_cents, max_students, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(course.id, course.title, course.startsAt, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status).run();
   return json({ id: course.id }, 201);
+}
+
+async function updateClass(request, env, classId) {
+  const body = await request.json();
+  const existing = await env.DB.prepare('SELECT * FROM classes WHERE id = ?').bind(classId).first();
+  if (!existing) return error('Class not found.', 404);
+  const course = {
+    title: clean(body.title ?? existing.title),
+    startsAt: clean(body.startsAt ?? existing.starts_at),
+    location: clean(body.location ?? existing.location),
+    classPrice: Math.round(Number(body.classPrice ?? existing.class_price_cents / 100) * 100),
+    classWithKitPrice: Math.round(Number(body.classWithKitPrice ?? existing.class_with_kit_price_cents / 100) * 100),
+    maxStudents: Number(body.maxStudents ?? existing.max_students),
+    status: clean(body.status ?? existing.status)
+  };
+  if (!course.title || !course.startsAt || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status)) return error('Class size must be between 6 and 10 students.');
+  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, location = ?, class_price_cents = ?, class_with_kit_price_cents = ?, max_students = ?, status = ? WHERE id = ?')
+    .bind(course.title, course.startsAt, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, classId).run();
+  return json({ ok: true });
 }
 
 async function updateRegistration(request, env, registrationId) {
@@ -104,10 +136,12 @@ export default {
     try {
       if (request.method === 'GET' && url.pathname === '/api/classes') return json(await listClasses(env), 200, corsHeaders);
       if (request.method === 'POST' && url.pathname === '/api/registrations') { const response = await createRegistration(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
+      if (request.method === 'POST' && url.pathname === '/api/kit-orders') { const response = await createKitOrder(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/admin/login') { const response = await adminLogin(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (!await authenticate(request, env)) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
       if (request.method === 'GET' && url.pathname === '/api/admin/classes') return json(await listClasses(env, true), 200, corsHeaders);
       if (request.method === 'POST' && url.pathname === '/api/admin/classes') { const response = await createClass(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
+      if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/classes/')) { const response = await updateClass(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'GET' && url.pathname === '/api/admin/registrations') return json(await registrations(env, url.searchParams.get('classId')), 200, corsHeaders);
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/registrations/')) { const response = await updateRegistration(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'GET' && url.pathname === '/api/admin/export.csv') { const rows = (await registrations(env)).filter((row) => row.payment_status === 'paid'); return new Response(csv(rows), { headers: { ...corsHeaders, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="protrainings-registrations.csv"' } }); }
