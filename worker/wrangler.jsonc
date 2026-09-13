@@ -1,0 +1,12 @@
+{
+  "name": "prepared-paws-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-13",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "prepared-paws-production",
+      "database_id": "1f92b67a-217a-4a8b-a92d-5db9fc75b01d"
+    }
+  ]
+}
