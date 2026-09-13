@@ -58,6 +58,11 @@
         <div class="panel-heading"><div><h3>Student registrations</h3><p>Only students marked paid are included in the ProTrainings CSV.</p></div><button class="button button-small" id="download-csv">Generate ProTrainings CSV</button></div>
         <div class="registrant-table-wrap"><table><thead><tr><th>Student</th><th>Class</th><th>Language</th><th>Order</th><th>Payment</th></tr></thead><tbody id="registrant-table"></tbody></table></div>
       </section>
+
+      <section class="admin-panel">
+        <div class="panel-heading"><div><h3>First aid kit orders</h3><p>Kit-only purchases are kept separate from course registrations and are not included in the ProTrainings CSV.</p></div></div>
+        <div class="registrant-table-wrap"><table><thead><tr><th>Customer</th><th>Order date</th><th>Amount</th><th>Payment</th></tr></thead><tbody id="kit-order-table"></tbody></table></div>
+      </section>
     </section>
   </main>
   <script src="admin.js"></script>

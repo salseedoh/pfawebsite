@@ -116,6 +116,19 @@ async function updateRegistration(request, env, registrationId) {
   return json({ ok: true });
 }
 
+async function kitOrders(env) {
+  const { results } = await env.DB.prepare('SELECT * FROM kit_orders ORDER BY created_at DESC').all();
+  return results;
+}
+
+async function updateKitOrder(request, env, orderId) {
+  const body = await request.json();
+  const status = clean(body.paymentStatus);
+  if (!['awaiting_payment', 'paid', 'refunded', 'cancelled'].includes(status)) return error('Invalid payment status.');
+  await env.DB.prepare("UPDATE kit_orders SET payment_status = ?, paid_at = CASE WHEN ? = 'paid' THEN CURRENT_TIMESTAMP ELSE paid_at END WHERE id = ?").bind(status, status, orderId).run();
+  return json({ ok: true });
+}
+
 async function registrations(env, classId) {
   const sql = `SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at FROM registrations r JOIN classes c ON c.id = r.class_id ${classId ? 'WHERE r.class_id = ?' : ''} ORDER BY c.starts_at ASC, r.created_at ASC`;
   const statement = env.DB.prepare(sql);
@@ -144,6 +157,8 @@ export default {
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/classes/')) { const response = await updateClass(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'GET' && url.pathname === '/api/admin/registrations') return json(await registrations(env, url.searchParams.get('classId')), 200, corsHeaders);
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/registrations/')) { const response = await updateRegistration(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
+      if (request.method === 'GET' && url.pathname === '/api/admin/kit-orders') return json(await kitOrders(env), 200, corsHeaders);
+      if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/kit-orders/')) { const response = await updateKitOrder(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'GET' && url.pathname === '/api/admin/export.csv') { const rows = (await registrations(env)).filter((row) => row.payment_status === 'paid'); return new Response(csv(rows), { headers: { ...corsHeaders, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="protrainings-registrations.csv"' } }); }
       return new Response('Prepared Paws API', { status: 200, headers: corsHeaders });
     } catch (cause) { return new Response(JSON.stringify({ error: 'Unable to complete that request.' }), { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } }); }

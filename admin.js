@@ -3,6 +3,7 @@ const tokenKey = 'preparedPawsAdminToken';
 let adminToken = sessionStorage.getItem(tokenKey);
 let classes = [];
 let registrations = [];
+let kitOrders = [];
 
 const byId = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
@@ -57,11 +58,26 @@ function renderRegistrations() {
   </tr>`).join('');
 }
 
+function renderKitOrders() {
+  const target = byId('kit-order-table');
+  if (!kitOrders.length) {
+    target.innerHTML = '<tr><td colspan="4" class="empty-cell">No kit-only orders yet.</td></tr>';
+    return;
+  }
+  target.innerHTML = kitOrders.map((order) => `<tr>
+    <td><strong>${escapeHtml(order.first_name)} ${escapeHtml(order.last_name)}</strong><br><span class="muted">${escapeHtml(order.email)}</span></td>
+    <td>${escapeHtml(dateTime(order.created_at + 'Z'))}</td>
+    <td><strong>${money(order.amount_cents / 100)}</strong></td>
+    <td><select class="kit-payment-status" data-order-id="${order.id}"><option value="awaiting_payment" ${order.payment_status === 'awaiting_payment' ? 'selected' : ''}>Awaiting payment</option><option value="paid" ${order.payment_status === 'paid' ? 'selected' : ''}>Paid</option><option value="refunded" ${order.payment_status === 'refunded' ? 'selected' : ''}>Refunded</option><option value="cancelled" ${order.payment_status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></td>
+  </tr>`).join('');
+}
+
 async function loadDashboard() {
   try {
-    [classes, registrations] = await Promise.all([api('/api/admin/classes'), api('/api/admin/registrations')]);
+    [classes, registrations, kitOrders] = await Promise.all([api('/api/admin/classes'), api('/api/admin/registrations'), api('/api/admin/kit-orders')]);
     renderClasses();
     renderRegistrations();
+    renderKitOrders();
   } catch (cause) {
     message(cause.message, true);
   }
@@ -129,6 +145,16 @@ byId('registrant-table').addEventListener('change', async (event) => {
   try {
     await api(`/api/admin/registrations/${select.dataset.registrationId}`, { method: 'PATCH', body: JSON.stringify({ paymentStatus: select.value }) });
     message('Payment status updated.');
+    await loadDashboard();
+  } catch (cause) { message(cause.message, true); }
+});
+
+byId('kit-order-table').addEventListener('change', async (event) => {
+  const select = event.target.closest('.kit-payment-status');
+  if (!select) return;
+  try {
+    await api(`/api/admin/kit-orders/${select.dataset.orderId}`, { method: 'PATCH', body: JSON.stringify({ paymentStatus: select.value }) });
+    message('Kit order payment status updated.');
     await loadDashboard();
   } catch (cause) { message(cause.message, true); }
 });
