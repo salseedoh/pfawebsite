@@ -47,6 +47,36 @@ body { background: var(--cream); }
   flex: 0 0 auto;
 }
 
+/* A simple, low-friction way for visitors to ask before they register. */
+.questions-section {
+  max-width: 1080px;
+  margin: 0 auto 34px;
+  padding: 42px 5%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(220px, .8fr) auto;
+  gap: 32px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #F4F8FF;
+}
+
+.questions-section .eyebrow { margin-bottom: 9px; }
+.questions-section h2 { font-size: clamp(1.75rem, 3vw, 2.45rem); margin-bottom: 0; }
+.questions-section > p { margin: 0; color: #527197; }
+.questions-section .button { white-space: nowrap; }
+
+.footer-contact {
+  display: grid;
+  gap: 2px;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.footer-contact span { color: #527197; }
+.footer-contact a { color: var(--ink); text-decoration: none; }
+.footer-contact a:hover { text-decoration: underline; }
+
 /* Keep the footer compact while preserving each small brand acknowledgement. */
 footer {
   padding: 20px 5%;
@@ -59,6 +89,15 @@ footer > img {
 }
 
 @media (max-width: 780px) {
+  .questions-section {
+    margin: 0 5% 18px;
+    padding: 30px 24px;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .questions-section .button { justify-self: start; }
+
   footer > img {
     width: 125px;
   }
