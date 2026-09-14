@@ -4,3 +4,7 @@ worker/node_modules/
 
 # Cloudflare/Wrangler local working files.
 worker/.wrangler/
+
+# Local legal-policy review copies. Keep these out of the public repository.
+/Prepared Paws Website Policy Draft.pdf
+/Prepared Paws Operating Agreement Draft.pdf
