@@ -98,9 +98,28 @@ footer > img {
 
   .questions-section .button { justify-self: start; }
 
+  footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "logo partner"
+      "tagline tagline"
+      "contact contact"
+      "copyright copyright";
+    align-items: center;
+    gap: 14px 18px;
+    padding: 28px 24px;
+  }
+
   footer > img {
+    grid-area: logo;
     width: 125px;
   }
+
+  .certification-partner { grid-area: partner; }
+  .footer-tagline { grid-area: tagline; }
+  .footer-contact { grid-area: contact; }
+  .footer-copyright { grid-area: copyright; }
 }
 
 /* The warm amber is the blue complement; it is reserved for supportive emphasis. */
