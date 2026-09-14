@@ -1,5 +1,11 @@
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
-const APP_ORIGIN = 'https://salseedoh.github.io';
+// Keep the GitHub Pages address available during the transition, while allowing
+// both versions of the public custom domain.
+const APP_ORIGINS = [
+  'https://salseedoh.github.io',
+  'https://preparedpaws.com',
+  'https://www.preparedpaws.com',
+];
 
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers: { ...JSON_HEADERS, ...headers } });
 const error = (message, status = 400) => json({ error: message }, status);
@@ -10,7 +16,7 @@ const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 
 function cors(request, env) {
   const origin = request.headers.get('Origin');
-  const allowed = new Set([APP_ORIGIN, ...(env.ALLOWED_ORIGINS || '').split(',').map((item) => item.trim()).filter(Boolean)]);
+  const allowed = new Set([...APP_ORIGINS, ...(env.ALLOWED_ORIGINS || '').split(',').map((item) => item.trim()).filter(Boolean)]);
   return origin && allowed.has(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {};
 }
 
