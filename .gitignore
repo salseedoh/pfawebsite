@@ -1,0 +1,6 @@
+# Local Node.js dependencies are downloaded when deploying the Cloudflare Worker.
+# They should never be committed to GitHub.
+worker/node_modules/
+
+# Cloudflare/Wrangler local working files.
+worker/.wrangler/
