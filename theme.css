@@ -77,6 +77,45 @@ body { background: var(--cream); }
 .footer-contact a { color: var(--ink); text-decoration: none; }
 .footer-contact a:hover { text-decoration: underline; }
 
+.footer-social {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+.footer-social > span {
+  margin-right: 2px;
+  font-size: .72rem;
+  color: #527197;
+}
+
+.footer-social a {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  transition: transform .18s ease, filter .18s ease;
+}
+
+.footer-social a:hover {
+  transform: translateY(-2px);
+  filter: brightness(.94);
+  text-decoration: none;
+}
+
+.footer-social a:focus-visible {
+  outline: 3px solid rgba(52, 121, 245, .28);
+  outline-offset: 3px;
+}
+
+.footer-social img {
+  width: 29px;
+  height: 29px;
+  display: block;
+}
+
 /* Keep the footer compact while preserving each small brand acknowledgement. */
 footer {
   padding: 20px 5%;
@@ -103,7 +142,6 @@ footer > img {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "logo partner"
-      "tagline tagline"
       "contact contact"
       "copyright copyright";
     align-items: center;
@@ -117,7 +155,6 @@ footer > img {
   }
 
   .certification-partner { grid-area: partner; }
-  .footer-tagline { grid-area: tagline; }
   .footer-contact { grid-area: contact; }
   .footer-copyright { grid-area: copyright; }
 }

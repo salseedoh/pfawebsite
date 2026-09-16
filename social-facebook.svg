@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Facebook</title>
+  <desc id="desc">Prepared Paws Facebook social media icon</desc>
+  <circle cx="32" cy="32" r="30" fill="#3479F5"/>
+  <circle cx="32" cy="32" r="29" fill="none" stroke="#0E2D56" stroke-opacity=".18" stroke-width="2"/>
+  <path fill="#fff" d="M36.35 51V34.37h5.58l.84-6.48h-6.42v-4.14c0-1.88.52-3.15 3.22-3.15H43V14.8c-.6-.08-2.66-.25-5.06-.25-5 0-8.42 3.05-8.42 8.65v4.69H23.9v6.48h5.62V51h6.83Z"/>
+</svg>
