@@ -142,7 +142,7 @@ footer > img {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "logo partner"
-      "contact contact"
+      "contact social"
       "copyright copyright";
     align-items: center;
     gap: 14px 18px;
@@ -156,7 +156,22 @@ footer > img {
 
   .certification-partner { grid-area: partner; }
   .footer-contact { grid-area: contact; }
-  .footer-copyright { grid-area: copyright; }
+  .footer-social { grid-area: social; justify-self: end; margin-top: 0; }
+  .footer-copyright { grid-area: copyright; justify-self: center; text-align: center; }
+}
+
+@media (max-width: 400px) {
+  footer {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "logo"
+      "partner"
+      "contact"
+      "social"
+      "copyright";
+  }
+
+  .footer-social { justify-self: start; }
 }
 
 /* The warm amber is the blue complement; it is reserved for supportive emphasis. */
