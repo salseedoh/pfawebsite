@@ -12,6 +12,17 @@
 
 body { background: var(--cream); }
 
+/* A brief availability update that remains visible without competing with booking actions. */
+.site-announcement {
+  padding: 9px 20px;
+  background: var(--ink);
+  color: #fff;
+  text-align: center;
+  font-size: .79rem;
+  font-weight: 700;
+  letter-spacing: .015em;
+}
+
 .button {
   background: var(--blue);
   box-shadow: 0 5px 0 rgba(16, 43, 91, .16);
@@ -61,6 +72,9 @@ body { background: var(--cream); }
 .policy-content article a { color: var(--ink); font-weight: 700; }
 .policy-contact { margin-top: 18px; padding: 34px; border-radius: 18px; background: var(--sky); }
 .policy-contact .eyebrow { margin-bottom: 13px; }
+
+.kit-availability { margin: 0 0 14px; color: #D7E6FF; font-size: .9rem; }
+.unavailable-link { color: #BBD4FF; cursor: default; opacity: .85; }
 
 /* A quiet footer acknowledgement for the organization that issues student certification. */
 .certification-partner {
@@ -162,6 +176,11 @@ footer > img {
 }
 
 @media (max-width: 780px) {
+  .site-announcement { padding: 9px 16px; font-size: .73rem; }
+
+  .site-header { position: relative; }
+  .site-nav { top: 76px; }
+
   .questions-section {
     margin: 0 5% 18px;
     padding: 30px 24px;

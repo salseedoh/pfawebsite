@@ -19,7 +19,7 @@ async function publicApi(path, options = {}) {
 
 function renderClasses() {
   if (!availableClasses.length) {
-    classList.innerHTML = '<p class="empty-state">No classes are currently scheduled. Please check back soon.</p>';
+    classList.innerHTML = '<p class="empty-state">New class dates will be announced soon. Please check back next week.</p>';
     return;
   }
   classList.innerHTML = availableClasses.map((course) => `<article class="class-card">
@@ -37,7 +37,7 @@ async function loadClasses() {
     availableClasses = await publicApi('/api/classes');
     renderClasses();
   } catch (cause) {
-    classList.innerHTML = '<p class="empty-state">Classes are temporarily unavailable. Please try again shortly.</p>';
+    classList.innerHTML = '<p class="empty-state">New class dates will be announced soon. Please check back next week.</p>';
   }
 }
 
@@ -116,11 +116,6 @@ document.addEventListener('click', (event) => {
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeRegistration(); });
 
 document.getElementById('year').textContent = new Date().getFullYear();
-const kitPrice = document.querySelector('.kit-price');
-const kitLink = document.querySelector('.kit-card .text-link');
-kitPrice.innerHTML = '$40 <small>kit only</small>';
-kitLink.innerHTML = 'Buy a kit <span>→</span>';
-kitLink.addEventListener('click', (event) => { event.preventDefault(); showKitOnlyForm(); });
 const menuButton = document.querySelector('.menu-button');
 const nav = document.querySelector('.site-nav');
 menuButton.addEventListener('click', () => { const open = nav.classList.toggle('open'); menuButton.setAttribute('aria-expanded', open); });
