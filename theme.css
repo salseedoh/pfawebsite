@@ -40,8 +40,6 @@ body { background: var(--cream); }
 .custom-date-note a { color: var(--ink); font-weight: 700; }
 
 .footer-policy-link {
-  margin-top: 3px;
-  width: fit-content;
   color: #527197 !important;
   font-size: .72rem;
 }
