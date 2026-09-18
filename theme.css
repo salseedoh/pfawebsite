@@ -28,6 +28,42 @@ body { background: var(--cream); }
 .class-meta, th { color: #527197; }
 .kit-card .eyebrow { color: #BBD4FF; }
 
+.custom-date-note {
+  max-width: 760px;
+  margin: 28px 0 0;
+  padding: 14px 18px;
+  border-left: 3px solid var(--orange);
+  color: #527197;
+  font-size: .94rem;
+}
+
+.custom-date-note a { color: var(--ink); font-weight: 700; }
+
+.footer-policy-link {
+  margin-top: 3px;
+  width: fit-content;
+  color: #527197 !important;
+  font-size: .72rem;
+}
+
+/* Dedicated legal page: clear reading width, quiet navigation, and strong hierarchy. */
+.policy-page { padding-bottom: 94px; }
+.policy-hero { max-width: 1080px; margin: 0 auto; padding: 82px 5% 54px; }
+.policy-hero h1 { margin-bottom: 18px; font-size: clamp(3rem, 6vw, 4.85rem); }
+.policy-hero > p:not(.eyebrow):not(.policy-effective) { max-width: 620px; font-size: 1.12rem; color: #527197; }
+.policy-effective { margin: 28px 0 0; color: #527197; font-size: .86rem; font-weight: 700; }
+.policy-content { max-width: 900px; margin: 0 auto; padding: 0 5%; }
+.policy-nav { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 42px; }
+.policy-nav a { border: 1px solid var(--line); border-radius: 999px; padding: 8px 13px; color: var(--ink); background: var(--sky); text-decoration: none; font-size: .8rem; font-weight: 700; }
+.policy-nav a:hover { background: #DCE9FF; }
+.policy-content article { padding: 34px 0; border-top: 1px solid var(--line); }
+.policy-content article h2 { margin-bottom: 18px; font-size: clamp(1.85rem, 3vw, 2.55rem); }
+.policy-content article h3 { margin: 26px 0 8px; font-family: Fraunces, serif; font-size: 1.25rem; }
+.policy-content article p { max-width: 760px; color: #38587F; }
+.policy-content article a { color: var(--ink); font-weight: 700; }
+.policy-contact { margin-top: 18px; padding: 34px; border-radius: 18px; background: var(--sky); }
+.policy-contact .eyebrow { margin-bottom: 13px; }
+
 /* A quiet footer acknowledgement for the organization that issues student certification. */
 .certification-partner {
   display: flex;
@@ -136,6 +172,14 @@ footer > img {
   }
 
   .questions-section .button { justify-self: start; }
+
+  .custom-date-note { margin-top: 22px; padding: 13px 15px; }
+
+  .policy-page { padding-bottom: 62px; }
+  .policy-hero { padding-top: 54px; padding-bottom: 38px; }
+  .policy-nav { margin-bottom: 26px; }
+  .policy-content article { padding: 27px 0; }
+  .policy-contact { padding: 27px 22px; }
 
   footer {
     display: grid;
