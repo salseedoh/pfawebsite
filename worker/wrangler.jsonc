@@ -2,6 +2,9 @@
   "name": "prepared-paws-api",
   "main": "src/index.js",
   "compatibility_date": "2026-09-13",
+  "vars": {
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAE9QzksNExiIZJop"
+  },
   "d1_databases": [
     {
       "binding": "DB",
