@@ -76,6 +76,16 @@ body { background: var(--cream); }
 .kit-availability { margin: 0 0 14px; color: #D7E6FF; font-size: .9rem; }
 .unavailable-link { color: #BBD4FF; cursor: default; opacity: .85; }
 
+.certification-callout {
+  max-width: 590px;
+  margin: 24px 0 0;
+  padding: 13px 16px;
+  border-left: 3px solid var(--orange);
+  background: rgba(255, 255, 255, .52);
+  color: var(--ink);
+  font-size: .96rem;
+}
+
 /* A quiet footer acknowledgement for the organization that issues student certification. */
 .certification-partner {
   display: flex;
