@@ -1,8 +1,6 @@
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
-// Keep the GitHub Pages address available during the transition, while allowing
-// both versions of the public custom domain.
+// Only the live Prepared Paws domain may make browser requests to this API.
 const APP_ORIGINS = [
-  'https://salseedoh.github.io',
   'https://preparedpaws.com',
   'https://www.preparedpaws.com',
 ];
@@ -16,7 +14,7 @@ const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 
 function cors(request, env) {
   const origin = request.headers.get('Origin');
-  const allowed = new Set([...APP_ORIGINS, ...(env.ALLOWED_ORIGINS || '').split(',').map((item) => item.trim()).filter(Boolean)]);
+  const allowed = new Set([...APP_ORIGINS, ...(env.ALLOWED_ORIGINS || '').split(',').map((item) => item.trim()).filter((item) => item && item !== 'https://salseedoh.github.io')]);
   return origin && allowed.has(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {};
 }
 
@@ -46,6 +44,19 @@ async function listClasses(env, includeAll = false) {
   return results.map(mapClass);
 }
 
+async function verifyTurnstile(token, request, env) {
+  if (!env.TURNSTILE_SECRET_KEY) return true;
+  if (!token) return false;
+  const form = new FormData();
+  form.append('secret', env.TURNSTILE_SECRET_KEY);
+  form.append('response', token);
+  const remoteIp = request.headers.get('CF-Connecting-IP');
+  if (remoteIp) form.append('remoteip', remoteIp);
+  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
+  const result = await response.json();
+  return result.success === true;
+}
+
 async function createRegistration(request, env) {
   const body = await request.json();
   const classId = clean(body.classId);
@@ -55,8 +66,11 @@ async function createRegistration(request, env) {
   const language = clean(body.language || 'english').toLowerCase();
   const kitSelected = asBoolean(body.kitSelected);
   if (!classId || !/^\S+@\S+\.\S+$/.test(email) || !firstName || !lastName) return error('Please provide an email, first name, and last name.');
+  if (!await verifyTurnstile(clean(body.turnstileToken), request, env)) return error('Please complete the security check and try again.', 403);
   const course = await env.DB.prepare("SELECT * FROM classes WHERE id = ? AND status = 'open'").bind(classId).first();
   if (!course) return error('This class is no longer open for registration.', 404);
+  const existing = await env.DB.prepare("SELECT id FROM registrations WHERE class_id = ? AND email = ? AND payment_status IN ('awaiting_payment', 'paid') LIMIT 1").bind(classId, email).first();
+  if (existing) return error('This email is already registered for this class. Each student must register with their own email address.', 409);
   const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM registrations WHERE class_id = ? AND payment_status IN ('awaiting_payment', 'paid')").bind(classId).first();
   if (count.count >= course.max_students) return error('This class is now full. Please choose another date.', 409);
   const amount = kitSelected ? course.class_with_kit_price_cents : course.class_price_cents;
@@ -73,6 +87,7 @@ async function createKitOrder(request, env) {
   const firstName = clean(body.firstName);
   const lastName = clean(body.lastName);
   if (!/^\S+@\S+\.\S+$/.test(email) || !firstName || !lastName) return error('Please provide an email, first name, and last name.');
+  if (!await verifyTurnstile(clean(body.turnstileToken), request, env)) return error('Please complete the security check and try again.', 403);
   const order = { id: id(), email, firstName, lastName };
   await env.DB.prepare('INSERT INTO kit_orders (id, email, first_name, last_name) VALUES (?, ?, ?, ?)').bind(order.id, email, firstName, lastName).run();
   return json({ orderId: order.id, paymentStatus: 'awaiting_payment', amount: 40, paymentLink: env.CHASE_KIT_LINK || null }, 201);
@@ -155,6 +170,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: { ...corsHeaders, 'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS', 'access-control-allow-headers': 'Authorization,Content-Type', 'access-control-max-age': '86400' } });
     try {
       if (request.method === 'GET' && url.pathname === '/api/classes') return json(await listClasses(env), 200, corsHeaders);
+      if (request.method === 'GET' && url.pathname === '/api/public-config') return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY || null }, 200, corsHeaders);
       if (request.method === 'POST' && url.pathname === '/api/registrations') { const response = await createRegistration(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/kit-orders') { const response = await createKitOrder(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/admin/login') { const response = await adminLogin(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }

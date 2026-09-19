@@ -12,6 +12,55 @@
 
 body { background: var(--cream); }
 
+/* Keep visual assets lossless while serving smaller WebP files to modern browsers. */
+.hero-art {
+  background: #dceecb url("first-aid-dog.png") center / cover no-repeat;
+  background-image: image-set(url("first-aid-dog.webp") type("image/webp"), url("first-aid-dog.png") type("image/png"));
+}
+
+.hero-art > * { display: none; }
+
+.hero-art::after {
+  content: "Ready for every wag.";
+  position: absolute;
+  left: 9%;
+  bottom: 9%;
+  padding: .4em .65em;
+  background: rgba(255, 250, 241, .88);
+  color: #123e70;
+  font: 600 clamp(1.35rem, 2.5vw, 2.35rem)/1.15 Fraunces, serif;
+}
+
+.kit-card {
+  position: relative;
+  min-height: 420px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.kit-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 24%, #123e70 75%), url("first-aid-cat.png") top center / 125% auto no-repeat;
+  background-image: linear-gradient(to bottom, transparent 24%, #123e70 75%), image-set(url("first-aid-cat.webp") type("image/webp"), url("first-aid-cat.png") type("image/png"));
+  opacity: .96;
+}
+
+.kit-card > * { position: relative; z-index: 1; }
+
+/* Consistent visible focus states for keyboard and switch-device users. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid rgba(52, 121, 245, .55);
+  outline-offset: 3px;
+}
+
+body.modal-open { overflow: hidden; }
+
+.turnstile-widget { min-height: 65px; margin: 14px 0 4px; }
+
 /* A brief availability update that remains visible without competing with booking actions. */
 .site-announcement {
   padding: 9px 20px;
@@ -229,20 +278,41 @@ footer > img {
   .footer-contact { grid-area: contact; }
   .footer-social { grid-area: social; justify-self: end; margin-top: 0; }
   .footer-copyright { grid-area: copyright; justify-self: center; text-align: center; }
+
+  .kit-card { min-height: 380px; }
+  .hero-art { min-height: 390px; }
 }
 
 @media (max-width: 400px) {
   footer {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
-      "logo"
-      "partner"
-      "contact"
-      "social"
-      "copyright";
+      "logo partner"
+      "contact social"
+      "copyright copyright";
+    gap: 15px 10px;
+    padding: 24px 18px;
   }
 
-  .footer-social { justify-self: start; }
+  footer > img { width: 112px; }
+  .certification-partner { justify-self: end; max-width: 132px; gap: 7px; font-size: .64rem; }
+  .certification-partner img { width: 38px; height: 38px; }
+  .footer-contact { font-size: .7rem; }
+  .footer-social { justify-self: end; gap: 5px; }
+  .footer-social > span { display: none; }
+  .footer-social a, .footer-social img { width: 27px; height: 27px; }
+}
+
+@media (max-width: 480px) {
+  .hero-copy { padding: 52px 24px 44px; }
+  .hero-actions { align-items: flex-start; flex-direction: column; gap: 18px; }
+  .trust-row { display: grid; gap: 8px; }
+  .hero-art { min-height: 330px; }
+  .hero-art::after { left: 7%; bottom: 7%; }
+  .section-heading { margin-bottom: 28px; }
+  .class-card { padding: 23px; }
+  .kit-card { padding: 28px; min-height: 345px; }
+  .cta { padding: 65px 24px; }
 }
 
 /* The warm amber is the blue complement; it is reserved for supportive emphasis. */
