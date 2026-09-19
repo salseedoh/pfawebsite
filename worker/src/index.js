@@ -88,10 +88,10 @@ async function adminLogin(request, env) {
 
 async function createClass(request, env) {
   const body = await request.json();
-  const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), location: clean(body.location), classPrice: Number(body.classPrice || 125) * 100, classWithKitPrice: Number(body.classWithKitPrice || 150) * 100, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open') };
-  if (!course.title || !course.startsAt || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10) return error('Class size must be between 6 and 10 students.');
-  await env.DB.prepare('INSERT INTO classes (id, title, starts_at, location, class_price_cents, class_with_kit_price_cents, max_students, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(course.id, course.title, course.startsAt, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status).run();
+  const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), durationMinutes: Number(body.durationMinutes), location: clean(body.location), classPrice: Number(body.classPrice || 125) * 100, classWithKitPrice: Number(body.classWithKitPrice || 150) * 100, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open') };
+  if (!course.title || !course.startsAt || !Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0 || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
+  await env.DB.prepare('INSERT INTO classes (id, title, starts_at, duration_minutes, location, class_price_cents, class_with_kit_price_cents, max_students, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(course.id, course.title, course.startsAt, course.durationMinutes, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status).run();
   return json({ id: course.id }, 201);
 }
 
@@ -102,15 +102,16 @@ async function updateClass(request, env, classId) {
   const course = {
     title: clean(body.title ?? existing.title),
     startsAt: clean(body.startsAt ?? existing.starts_at),
+    durationMinutes: body.durationMinutes === undefined ? existing.duration_minutes : Number(body.durationMinutes),
     location: clean(body.location ?? existing.location),
     classPrice: Math.round(Number(body.classPrice ?? existing.class_price_cents / 100) * 100),
     classWithKitPrice: Math.round(Number(body.classWithKitPrice ?? existing.class_with_kit_price_cents / 100) * 100),
     maxStudents: Number(body.maxStudents ?? existing.max_students),
     status: clean(body.status ?? existing.status)
   };
-  if (!course.title || !course.startsAt || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status)) return error('Class size must be between 6 and 10 students.');
-  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, location = ?, class_price_cents = ?, class_with_kit_price_cents = ?, max_students = ?, status = ? WHERE id = ?')
-    .bind(course.title, course.startsAt, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, classId).run();
+  if (!course.title || !course.startsAt || (course.durationMinutes !== null && (!Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0)) || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
+  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, duration_minutes = ?, location = ?, class_price_cents = ?, class_with_kit_price_cents = ?, max_students = ?, status = ? WHERE id = ?')
+    .bind(course.title, course.startsAt, course.durationMinutes, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, classId).run();
   return json({ ok: true });
 }
 

@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS classes (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   starts_at TEXT NOT NULL,
+  duration_minutes INTEGER,
   location TEXT NOT NULL,
   class_price_cents INTEGER NOT NULL DEFAULT 12500,
   class_with_kit_price_cents INTEGER NOT NULL DEFAULT 15000,

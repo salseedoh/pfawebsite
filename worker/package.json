@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:migrate": "wrangler d1 execute prepared-paws-production --remote --file=./schema.sql"
+    "db:migrate": "wrangler d1 migrations apply prepared-paws-production --remote"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

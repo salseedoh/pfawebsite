@@ -9,6 +9,15 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character
 const dateOnly = (value) => new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(value));
 const timeOnly = (value) => new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 const money = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+const formatDuration = (value) => {
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes <= 0) return '';
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  const hourText = hours ? `${hours} hour${hours === 1 ? '' : 's'}` : '';
+  const minuteText = remainingMinutes ? `${remainingMinutes} minutes` : '';
+  return [hourText, minuteText].filter(Boolean).join(' ');
+};
 
 async function publicApi(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } });
@@ -22,13 +31,16 @@ function renderClasses() {
     classList.innerHTML = '<p class="empty-state">New class dates will be announced soon. Please check back next week.</p>';
     return;
   }
-  classList.innerHTML = availableClasses.map((course) => `<article class="class-card">
+  classList.innerHTML = availableClasses.map((course) => {
+    const duration = formatDuration(course.duration_minutes);
+    return `<article class="class-card">
     <p class="date-label">${escapeHtml(dateOnly(course.starts_at))}</p>
     <h3>${escapeHtml(course.title)}</h3>
-    <p class="class-meta">${escapeHtml(timeOnly(course.starts_at))}<br>${escapeHtml(course.location)}<br>Limited to ${course.max_students} students</p>
+    <p class="class-meta">${escapeHtml(timeOnly(course.starts_at))}<br>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}<br>Limited to ${course.max_students} students</p>
     <p><strong>${money(course.class_price)}</strong> per student</p>
     <button class="button register-button" data-class="${course.id}">Select this class</button>
-  </article>`).join('');
+  </article>`;
+  }).join('');
 }
 
 async function loadClasses() {
@@ -57,7 +69,8 @@ function showPaymentNextStep(result, firstName, itemName) {
 }
 
 function showClassForm() {
-  content.innerHTML = `<p class="eyebrow">Reserve your place</p><h2 id="registration-title">${escapeHtml(activeClass.title)}</h2><p>${escapeHtml(dateOnly(activeClass.starts_at))} &middot; ${escapeHtml(timeOnly(activeClass.starts_at))}<br>${escapeHtml(activeClass.location)}</p>
+  const duration = formatDuration(activeClass.duration_minutes);
+  content.innerHTML = `<p class="eyebrow">Reserve your place</p><h2 id="registration-title">${escapeHtml(activeClass.title)}</h2><p>${escapeHtml(dateOnly(activeClass.starts_at))} &middot; ${escapeHtml(timeOnly(activeClass.starts_at))}<br>${escapeHtml(activeClass.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p>
     <form id="registration-form"><div class="form-grid"><label>Email*<input name="email" type="email" autocomplete="email" required></label><label>First name*<input name="firstName" autocomplete="given-name" required></label><label>Last name*<input name="lastName" autocomplete="family-name" required></label><label>Language<select name="language"><option value="english">English</option><option value="spanish">Spanish</option><option value="french">French</option><option value="other">Other</option></select></label></div>
     <fieldset><legend>Would you like to add a pet first aid kit?</legend><label class="radio-option"><input type="radio" name="kit" value="no" checked><span><strong>Class only</strong>Course registration &middot; ${money(activeClass.class_price)}</span></label><label class="radio-option"><input type="radio" name="kit" value="yes"><span><strong>Class + first aid kit</strong>Course and kit &middot; ${money(activeClass.class_with_kit_price)}</span></label></fieldset><button class="button" type="submit">Continue to payment</button><p class="form-note" id="registration-note">Your class information is saved before you are sent to secure payment.</p></form>`;
   document.getElementById('registration-form').addEventListener('submit', submitRegistration);

@@ -9,6 +9,15 @@ const byId = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
 const money = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 const dateTime = (value) => new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+const formatDuration = (value) => {
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes <= 0) return '';
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  const hourText = hours ? `${hours} hour${hours === 1 ? '' : 's'}` : '';
+  const minuteText = remainingMinutes ? `${remainingMinutes} minutes` : '';
+  return [hourText, minuteText].filter(Boolean).join(' ');
+};
 
 async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -36,8 +45,9 @@ function renderClasses() {
   target.innerHTML = classes.map((course) => {
     const courseRegistrations = registrations.filter((registration) => registration.class_id === course.id);
     const paid = courseRegistrations.filter((registration) => registration.payment_status === 'paid').length;
+    const duration = formatDuration(course.duration_minutes);
     return `<article class="admin-class-card">
-      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)}</h3><p>${escapeHtml(course.location)}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${courseRegistrations.length} registrations</p></div>
+      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${courseRegistrations.length} registrations</p></div>
       <div class="class-admin-actions"><span>${money(course.class_price)} class &middot; ${money(course.class_with_kit_price)} with kit</span><label>Status<select class="class-status" data-class-id="${course.id}"><option value="open" ${course.status === 'open' ? 'selected' : ''}>Open</option><option value="closed" ${course.status === 'closed' ? 'selected' : ''}>Closed</option><option value="cancelled" ${course.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label></div>
     </article>`;
   }).join('');
