@@ -1,6 +1,7 @@
 const API_URL = 'https://prepared-paws-api.salcido-heriberto.workers.dev';
 let availableClasses = [];
 let activeClass = null;
+let activePrivateAccessToken = null;
 let lastFocusedElement = null;
 let publicConfig = { turnstileSiteKey: null };
 let turnstileScript;
@@ -113,7 +114,7 @@ function showPaymentNextStep(result, firstName, itemName) {
 
 function showClassForm() {
   const duration = formatDuration(activeClass.duration_minutes);
-  content.innerHTML = `<p class="eyebrow">Reserve your place</p><h2 id="registration-title">${escapeHtml(activeClass.title)}</h2><p>${escapeHtml(dateOnly(activeClass.starts_at))} &middot; ${escapeHtml(classTime(activeClass.starts_at))}<br>${escapeHtml(activeClass.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p>
+  content.innerHTML = `<p class="eyebrow">${activePrivateAccessToken ? 'Private class registration' : 'Reserve your place'}</p><h2 id="registration-title">${escapeHtml(activeClass.title)}</h2><p>${escapeHtml(dateOnly(activeClass.starts_at))} &middot; ${escapeHtml(classTime(activeClass.starts_at))}<br>${escapeHtml(activeClass.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p>
     <form id="registration-form"><div class="form-grid"><label>Email*<input name="email" type="email" autocomplete="email" required></label><label>First name*<input name="firstName" autocomplete="given-name" required></label><label>Last name*<input name="lastName" autocomplete="family-name" required></label><label>Language<select name="language"><option value="english">English</option><option value="spanish">Spanish</option><option value="french">French</option><option value="other">Other</option></select></label></div>
     <fieldset><legend>Would you like to add a pet first aid kit?</legend><label class="radio-option"><input type="radio" name="kit" value="no" checked><span><strong>Class only</strong>Course registration &middot; ${money(activeClass.class_price)}</span></label><label class="radio-option"><input type="radio" name="kit" value="yes"><span><strong>Class + first aid kit</strong>Course and kit &middot; ${money(activeClass.class_with_kit_price)}</span></label></fieldset><div class="turnstile-widget"></div><button class="button" type="submit">Continue to payment</button><p class="form-note" id="registration-note" role="status">Your class information is saved before you are sent to secure payment.</p></form>`;
   const form = document.getElementById('registration-form');
@@ -131,7 +132,7 @@ async function submitRegistration(event) {
   button.textContent = 'Saving registration...';
   try {
     if (publicConfig.turnstileSiteKey && !turnstileToken(form)) throw new Error('Please complete the security check before continuing.');
-    const result = await publicApi('/api/registrations', { method: 'POST', body: JSON.stringify({ classId: activeClass.id, email: values.email, firstName: values.firstName, lastName: values.lastName, language: values.language, kitSelected: values.kit === 'yes', turnstileToken: turnstileToken(form) }) });
+    const result = await publicApi('/api/registrations', { method: 'POST', body: JSON.stringify({ classId: activeClass.id, email: values.email, firstName: values.firstName, lastName: values.lastName, language: values.language, kitSelected: values.kit === 'yes', privateAccessToken: activePrivateAccessToken, turnstileToken: turnstileToken(form) }) });
     showPaymentNextStep(result, values.firstName, values.kit === 'yes' ? 'class and first aid kit' : 'class');
   } catch (cause) {
     button.disabled = false;
@@ -171,6 +172,7 @@ document.addEventListener('click', (event) => {
   const registerButton = event.target.closest('.register-button');
   if (registerButton) {
     activeClass = availableClasses.find((course) => course.id === registerButton.dataset.class);
+    activePrivateAccessToken = null;
     if (activeClass) { openModal(); showClassForm(); }
   }
   if (event.target.closest('[data-close], .modal-done')) closeRegistration();
@@ -208,6 +210,22 @@ nav.addEventListener('click', (event) => {
 
 async function initialize() {
   try { publicConfig = await publicApi('/api/public-config'); } catch { /* Registration remains usable until Turnstile is configured. */ }
+  const privateAccessToken = new URLSearchParams(window.location.search).get('private');
+  if (privateAccessToken) {
+    const robots = document.createElement('meta');
+    robots.name = 'robots';
+    robots.content = 'noindex, nofollow';
+    document.head.append(robots);
+    openModal();
+    content.innerHTML = '<p class="eyebrow">Private class registration</p><h2 id="registration-title">Loading your class...</h2>';
+    try {
+      activeClass = await publicApi(`/api/private-classes/${encodeURIComponent(privateAccessToken)}`);
+      activePrivateAccessToken = privateAccessToken;
+      showClassForm();
+    } catch (cause) {
+      content.innerHTML = `<div class="confirmation"><p class="eyebrow">Private class</p><h2 id="registration-title">This link is unavailable.</h2><p>${escapeHtml(cause.message || 'Please contact us for help with your registration.')}</p><a class="button" href="mailto:contact@preparedpaws.com">Email us</a><button class="text-button modal-done" type="button">Done</button></div>`;
+    }
+  }
   loadClasses();
 }
 

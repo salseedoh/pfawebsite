@@ -18,6 +18,7 @@ const formatDuration = (value) => {
   const minuteText = remainingMinutes ? `${remainingMinutes} minutes` : '';
   return [hourText, minuteText].filter(Boolean).join(' ');
 };
+const privateClassLink = (course) => `https://preparedpaws.com/?private=${encodeURIComponent(course.private_access_token)}`;
 
 async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -46,9 +47,10 @@ function renderClasses() {
     const courseRegistrations = registrations.filter((registration) => registration.class_id === course.id);
     const paid = courseRegistrations.filter((registration) => registration.payment_status === 'paid').length;
     const duration = formatDuration(course.duration_minutes);
+    const isPrivate = course.visibility === 'private';
     return `<article class="admin-class-card">
-      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${courseRegistrations.length} registrations</p></div>
-      <div class="class-admin-actions"><span>${money(course.class_price)} class &middot; ${money(course.class_with_kit_price)} with kit</span><label>Status<select class="class-status" data-class-id="${course.id}"><option value="open" ${course.status === 'open' ? 'selected' : ''}>Open</option><option value="closed" ${course.status === 'closed' ? 'selected' : ''}>Closed</option><option value="cancelled" ${course.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label></div>
+      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)} ${isPrivate ? '<span class="private-badge">Private</span>' : ''}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${courseRegistrations.length} registrations</p></div>
+      <div class="class-admin-actions"><span>${money(course.class_price)} class &middot; ${money(course.class_with_kit_price)} with kit</span>${isPrivate ? `<div class="private-class-tools"><button class="button button-small copy-private-link" type="button" data-private-link="${escapeHtml(privateClassLink(course))}">Copy private link</button><button class="text-button regenerate-private-link" type="button" data-class-id="${course.id}">Generate new link</button></div>` : ''}<label>Status<select class="class-status" data-class-id="${course.id}"><option value="open" ${course.status === 'open' ? 'selected' : ''}>Open</option><option value="closed" ${course.status === 'closed' ? 'selected' : ''}>Closed</option><option value="cancelled" ${course.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label></div>
     </article>`;
   }).join('');
 }
@@ -129,12 +131,12 @@ byId('class-form').addEventListener('submit', async (event) => {
   const values = Object.fromEntries(new FormData(event.currentTarget));
   try {
     message('Publishing class...');
-    await api('/api/admin/classes', { method: 'POST', body: JSON.stringify({ ...values, startsAt: new Date(values.startsAt).toISOString() }) });
+    const result = await api('/api/admin/classes', { method: 'POST', body: JSON.stringify({ ...values, visibility: values.visibility === 'private' ? 'private' : 'public', startsAt: new Date(values.startsAt).toISOString() }) });
     event.currentTarget.reset();
     event.currentTarget.classPrice.value = '125';
     event.currentTarget.classWithKitPrice.value = '150';
     event.currentTarget.maxStudents.value = '10';
-    message('Class published. It is now visible on the website.');
+    message(result.privateAccessToken ? 'Private class created. Copy its private registration link below.' : 'Class published. It is now visible on the website.');
     await loadDashboard();
   } catch (cause) { message(cause.message, true); }
 });
@@ -145,6 +147,27 @@ byId('admin-class-list').addEventListener('change', async (event) => {
   try {
     await api(`/api/admin/classes/${select.dataset.classId}`, { method: 'PATCH', body: JSON.stringify({ status: select.value }) });
     message('Class status updated.');
+    await loadDashboard();
+  } catch (cause) { message(cause.message, true); }
+});
+
+byId('admin-class-list').addEventListener('click', async (event) => {
+  const copyButton = event.target.closest('.copy-private-link');
+  if (copyButton) {
+    try {
+      await navigator.clipboard.writeText(copyButton.dataset.privateLink);
+      message('Private registration link copied.');
+    } catch {
+      message('Unable to copy the link. Please try again.', true);
+    }
+    return;
+  }
+  const regenerateButton = event.target.closest('.regenerate-private-link');
+  if (!regenerateButton) return;
+  if (!window.confirm('Generate a new private link? Anyone using the current link will no longer be able to register.')) return;
+  try {
+    await api(`/api/admin/classes/${regenerateButton.dataset.classId}`, { method: 'PATCH', body: JSON.stringify({ regeneratePrivateLink: true }) });
+    message('A new private registration link has been created.');
     await loadDashboard();
   } catch (cause) { message(cause.message, true); }
 });

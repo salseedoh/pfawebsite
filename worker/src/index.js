@@ -9,6 +9,10 @@ const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(d
 const error = (message, status = 400) => json({ error: message }, status);
 const clean = (value) => String(value ?? '').trim();
 const id = () => crypto.randomUUID();
+const privateAccessToken = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+};
 const asBoolean = (value) => value === true || value === 1 || value === '1';
 const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 
@@ -36,12 +40,24 @@ function mapClass(row) {
   return { ...row, class_price: row.class_price_cents / 100, class_with_kit_price: row.class_with_kit_price_cents / 100 };
 }
 
+function publicClass(row) {
+  const course = mapClass(row);
+  delete course.private_access_token;
+  return course;
+}
+
 async function listClasses(env, includeAll = false) {
   const query = includeAll
     ? 'SELECT * FROM classes ORDER BY starts_at ASC'
-    : "SELECT * FROM classes WHERE status = 'open' AND starts_at >= datetime('now', '-1 day') ORDER BY starts_at ASC";
+    : "SELECT * FROM classes WHERE status = 'open' AND visibility = 'public' AND starts_at >= datetime('now', '-1 day') ORDER BY starts_at ASC";
   const { results } = await env.DB.prepare(query).all();
-  return results.map(mapClass);
+  return results.map(includeAll ? mapClass : publicClass);
+}
+
+async function privateClass(env, accessToken) {
+  const course = await env.DB.prepare("SELECT * FROM classes WHERE visibility = 'private' AND private_access_token = ? AND status = 'open' AND starts_at >= datetime('now', '-1 day')")
+    .bind(accessToken).first();
+  return course ? publicClass(course) : null;
 }
 
 async function verifyTurnstile(token, request, env) {
@@ -65,10 +81,12 @@ async function createRegistration(request, env) {
   const lastName = clean(body.lastName);
   const language = clean(body.language || 'english').toLowerCase();
   const kitSelected = asBoolean(body.kitSelected);
+  const accessToken = clean(body.privateAccessToken);
   if (!classId || !/^\S+@\S+\.\S+$/.test(email) || !firstName || !lastName) return error('Please provide an email, first name, and last name.');
   if (!await verifyTurnstile(clean(body.turnstileToken), request, env)) return error('Please complete the security check and try again.', 403);
   const course = await env.DB.prepare("SELECT * FROM classes WHERE id = ? AND status = 'open'").bind(classId).first();
   if (!course) return error('This class is no longer open for registration.', 404);
+  if (course.visibility === 'private' && (!accessToken || accessToken !== course.private_access_token)) return error('This private class link is no longer active.', 404);
   const existing = await env.DB.prepare("SELECT id FROM registrations WHERE class_id = ? AND email = ? AND payment_status IN ('awaiting_payment', 'paid') LIMIT 1").bind(classId, email).first();
   if (existing) return error('This email is already registered for this class. Each student must register with their own email address.', 409);
   const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM registrations WHERE class_id = ? AND payment_status IN ('awaiting_payment', 'paid')").bind(classId).first();
@@ -103,11 +121,12 @@ async function adminLogin(request, env) {
 
 async function createClass(request, env) {
   const body = await request.json();
-  const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), durationMinutes: Number(body.durationMinutes), location: clean(body.location), classPrice: Number(body.classPrice || 125) * 100, classWithKitPrice: Number(body.classWithKitPrice || 150) * 100, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open') };
-  if (!course.title || !course.startsAt || !Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0 || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
-  await env.DB.prepare('INSERT INTO classes (id, title, starts_at, duration_minutes, location, class_price_cents, class_with_kit_price_cents, max_students, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(course.id, course.title, course.startsAt, course.durationMinutes, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status).run();
-  return json({ id: course.id }, 201);
+  const visibility = clean(body.visibility || 'public');
+  const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), durationMinutes: Number(body.durationMinutes), location: clean(body.location), classPrice: Number(body.classPrice || 125) * 100, classWithKitPrice: Number(body.classWithKitPrice || 150) * 100, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open'), visibility, privateAccessToken: visibility === 'private' ? privateAccessToken() : null };
+  if (!course.title || !course.startsAt || !Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0 || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
+  await env.DB.prepare('INSERT INTO classes (id, title, starts_at, duration_minutes, location, class_price_cents, class_with_kit_price_cents, max_students, status, visibility, private_access_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(course.id, course.title, course.startsAt, course.durationMinutes, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, course.visibility, course.privateAccessToken).run();
+  return json({ id: course.id, privateAccessToken: course.privateAccessToken }, 201);
 }
 
 async function updateClass(request, env, classId) {
@@ -122,12 +141,14 @@ async function updateClass(request, env, classId) {
     classPrice: Math.round(Number(body.classPrice ?? existing.class_price_cents / 100) * 100),
     classWithKitPrice: Math.round(Number(body.classWithKitPrice ?? existing.class_with_kit_price_cents / 100) * 100),
     maxStudents: Number(body.maxStudents ?? existing.max_students),
-    status: clean(body.status ?? existing.status)
+    status: clean(body.status ?? existing.status),
+    visibility: clean(body.visibility ?? existing.visibility ?? 'public'),
+    privateAccessToken: asBoolean(body.regeneratePrivateLink) && (body.visibility ?? existing.visibility) === 'private' ? privateAccessToken() : existing.private_access_token
   };
-  if (!course.title || !course.startsAt || (course.durationMinutes !== null && (!Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0)) || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
-  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, duration_minutes = ?, location = ?, class_price_cents = ?, class_with_kit_price_cents = ?, max_students = ?, status = ? WHERE id = ?')
-    .bind(course.title, course.startsAt, course.durationMinutes, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, classId).run();
-  return json({ ok: true });
+  if (!course.title || !course.startsAt || (course.durationMinutes !== null && (!Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0)) || !course.location || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status) || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
+  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, duration_minutes = ?, location = ?, class_price_cents = ?, class_with_kit_price_cents = ?, max_students = ?, status = ?, visibility = ?, private_access_token = ? WHERE id = ?')
+    .bind(course.title, course.startsAt, course.durationMinutes, course.location, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, course.visibility, course.visibility === 'private' ? course.privateAccessToken : null, classId).run();
+  return json({ ok: true, privateAccessToken: course.visibility === 'private' ? course.privateAccessToken : null });
 }
 
 async function updateRegistration(request, env, registrationId) {
@@ -170,6 +191,10 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: { ...corsHeaders, 'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS', 'access-control-allow-headers': 'Authorization,Content-Type', 'access-control-max-age': '86400' } });
     try {
       if (request.method === 'GET' && url.pathname === '/api/classes') return json(await listClasses(env), 200, corsHeaders);
+      if (request.method === 'GET' && url.pathname.startsWith('/api/private-classes/')) {
+        const course = await privateClass(env, decodeURIComponent(url.pathname.split('/').pop()));
+        return course ? json(course, 200, corsHeaders) : error('This private class link is no longer active.', 404);
+      }
       if (request.method === 'GET' && url.pathname === '/api/public-config') return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY || null }, 200, corsHeaders);
       if (request.method === 'POST' && url.pathname === '/api/registrations') { const response = await createRegistration(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/kit-orders') { const response = await createKitOrder(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }

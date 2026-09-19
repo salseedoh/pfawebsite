@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS classes (
   class_with_kit_price_cents INTEGER NOT NULL DEFAULT 15000,
   max_students INTEGER NOT NULL DEFAULT 10,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'cancelled')),
+  visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private')),
+  private_access_token TEXT UNIQUE,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

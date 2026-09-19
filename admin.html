@@ -37,7 +37,7 @@
       <p class="form-note" id="dashboard-message" aria-live="polite"></p>
 
       <section class="admin-panel">
-        <div class="panel-heading"><div><h3>Add a class</h3><p>New open classes appear automatically on the website.</p></div></div>
+        <div class="panel-heading"><div><h3>Add a class</h3><p>Public classes appear on the website. Private classes are accessible only through their shareable registration link.</p></div></div>
         <form class="class-form" id="class-form">
           <label>Class title<input name="title" value="Pet First Aid &amp; CPR" required></label>
           <label>Date and time (Central Time)<input name="startsAt" type="datetime-local" required></label>
@@ -46,6 +46,7 @@
           <label>Class price<input name="classPrice" type="number" min="0" step="0.01" value="125" required></label>
           <label>Class + kit price<input name="classWithKitPrice" type="number" min="0" step="0.01" value="150" required></label>
           <label>Maximum students<input name="maxStudents" type="number" min="6" max="10" value="10" required></label>
+          <label class="private-class-option"><input name="visibility" type="checkbox" value="private"><span><strong>Private class</strong> Hide this class from the public class list and create a shareable registration link.</span></label>
           <button class="button" type="submit">Publish class</button>
         </form>
       </section>
