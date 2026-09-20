@@ -34,7 +34,7 @@ async function publicApi(path, options = {}) {
 
 function renderClasses() {
   if (!availableClasses.length) {
-    classList.innerHTML = '<p class="empty-state">New class dates will be announced soon. Please check back next week.</p>';
+    classList.innerHTML = '<p class="empty-state">New class dates will be announced soon. Please check back later this week.</p>';
     return;
   }
   classList.innerHTML = availableClasses.map((course) => {
