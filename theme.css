@@ -14,7 +14,7 @@ body { background: var(--cream); }
 
 /* Keep visual assets lossless while serving smaller WebP files to modern browsers. */
 .hero-art {
-  background: #dceecb url("first-aid-dog.png") center / cover no-repeat;
+  background: #eef4ff url("first-aid-dog.png") center / cover no-repeat;
   background-image: image-set(url("first-aid-dog.webp") type("image/webp"), url("first-aid-dog.png") type("image/png"));
 }
 
