@@ -1,5 +1,8 @@
-const API_URL = 'https://prepared-paws-api.salcido-heriberto.workers.dev';
-const sessionId = new URLSearchParams(window.location.search).get('session_id');
+const params = new URLSearchParams(window.location.search);
+const API_URL = params.get('environment') === 'test'
+  ? 'https://prepared-paws-api-test.salcido-heriberto.workers.dev'
+  : 'https://prepared-paws-api.salcido-heriberto.workers.dev';
+const sessionId = params.get('session_id');
 const icon = document.getElementById('payment-icon');
 const title = document.getElementById('payment-title');
 const message = document.getElementById('payment-message');
