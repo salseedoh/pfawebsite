@@ -10,7 +10,7 @@ const home = document.getElementById('return-home');
 
 function finish(nextTitle, nextMessage, state = 'complete') {
   icon.className = `payment-status-icon ${state}`;
-  icon.textContent = state === 'complete' ? '\\u2713' : '!';
+  icon.textContent = state === 'complete' ? '✓' : '!';
   title.textContent = nextTitle;
   message.textContent = nextMessage;
   home.hidden = false;

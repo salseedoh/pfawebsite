@@ -8,7 +8,7 @@
     <link rel="icon" href="favicon.png" />
     <link rel="stylesheet" href="styles.css" />
     <style>.payment-page{min-height:100vh;display:grid;place-items:center;padding:30px;background:var(--sky)}.payment-card{width:min(560px,100%);padding:42px;background:var(--cream);border-radius:20px;text-align:center;box-shadow:0 16px 35px #123e7020}.payment-card img{width:180px;max-width:80%;margin-bottom:32px}.payment-card h1{font-size:clamp(2.25rem,5vw,3.3rem)}.payment-card .button{margin-top:15px}.payment-status-icon{width:54px;height:54px;margin:0 auto 18px;border:5px solid #b9cad4;border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.payment-status-icon.complete{border:0;background:var(--green);display:grid;place-items:center;font-size:1.6rem;animation:none}.payment-status-icon.problem{border:0;background:#f7d9cf;display:grid;place-items:center;font-size:1.6rem;animation:none}</style>
-    <script src="payment-success.js" defer></script>
+    <script src="payment-success.js?v=2" defer></script>
   </head>
   <body>
     <main class="payment-page"><section class="payment-card" aria-live="polite"><img src="prepared-paws-logo.svg" alt="Prepared Paws" /><div class="payment-status-icon" id="payment-icon" aria-hidden="true"></div><p class="eyebrow">Payment</p><h1 id="payment-title">Confirming your payment</h1><p id="payment-message">Please keep this page open while we confirm your payment securely.</p><a class="button" id="return-home" href="index.html" hidden>Return to Prepared Paws</a></section></main>
