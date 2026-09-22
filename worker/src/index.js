@@ -1,6 +1,6 @@
 import { KIT_PICKUP_ZIPS } from './kit-pickup-zips.js';
 import { createStripeCheckoutSession, expireStripeCheckoutSession, retrieveStripeCheckoutSession, verifyStripeWebhookSignature } from './stripe.js';
-import { confirmationEmail } from './email-templates.js';
+import { adminOrderNotification, confirmationEmail } from './email-templates.js';
 import { sendZeptoMail } from './zeptomail.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
@@ -236,6 +236,7 @@ async function stripeWebhook(request, env) {
   }
 
   await sendConfirmationEmail(orderType, orderId, table, env);
+  await sendAdminOrderNotification(orderType, orderId, table, env);
   return json({ received: true });
 }
 
@@ -263,6 +264,35 @@ async function sendConfirmationEmail(orderType, orderId, table, env) {
   } catch (cause) {
     const message = clean(cause?.message || 'Unable to send confirmation email.').slice(0, 1000);
     await env.DB.prepare(`UPDATE ${table} SET confirmation_email_status = 'failed', confirmation_email_error = ?, confirmation_email_attempts = confirmation_email_attempts + 1 WHERE id = ?`)
+      .bind(message, orderId).run();
+    throw cause;
+  }
+}
+
+async function sendAdminOrderNotification(orderType, orderId, table, env) {
+  const order = orderType === 'class_registration'
+    ? await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.duration_minutes AS class_duration_minutes, c.location AS class_location FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first()
+    : await env.DB.prepare('SELECT * FROM kit_orders WHERE id = ?').bind(orderId).first();
+  if (!order || order.admin_notification_status === 'sent') return;
+
+  try {
+    const notification = adminOrderNotification(orderType, order);
+    const result = await sendZeptoMail({
+      from: { address: 'admin@preparedpaws.com', name: 'Prepared Paws' },
+      to: [{ email_address: { address: 'admin@preparedpaws.com', name: 'Prepared Paws Admin' } }],
+      reply_to: [{ address: notification.replyTo, name: 'Prepared Paws' }],
+      subject: notification.subject,
+      htmlbody: notification.htmlbody,
+      textbody: notification.textbody,
+      client_reference: `prepared-paws-admin-${orderType}-${order.id}`,
+      track_opens: false,
+      track_clicks: false,
+    }, env.ZEPTOMAIL_API_KEY);
+    await env.DB.prepare(`UPDATE ${table} SET admin_notification_status = 'sent', admin_notification_sent_at = CURRENT_TIMESTAMP, admin_notification_request_id = ?, admin_notification_error = NULL, admin_notification_attempts = admin_notification_attempts + 1 WHERE id = ?`)
+      .bind(clean(result.request_id), orderId).run();
+  } catch (cause) {
+    const message = clean(cause?.message || 'Unable to send admin order notification.').slice(0, 1000);
+    await env.DB.prepare(`UPDATE ${table} SET admin_notification_status = 'failed', admin_notification_error = ?, admin_notification_attempts = admin_notification_attempts + 1 WHERE id = ?`)
       .bind(message, orderId).run();
     throw cause;
   }

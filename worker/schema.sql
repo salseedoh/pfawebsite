@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS registrations (
   confirmation_email_request_id TEXT,
   confirmation_email_error TEXT,
   confirmation_email_attempts INTEGER NOT NULL DEFAULT 0,
+  admin_notification_status TEXT NOT NULL DEFAULT 'pending' CHECK (admin_notification_status IN ('pending', 'sent', 'failed')),
+  admin_notification_sent_at TEXT,
+  admin_notification_request_id TEXT,
+  admin_notification_error TEXT,
+  admin_notification_attempts INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   paid_at TEXT,
   notes TEXT
@@ -55,6 +60,11 @@ CREATE TABLE IF NOT EXISTS kit_orders (
   confirmation_email_request_id TEXT,
   confirmation_email_error TEXT,
   confirmation_email_attempts INTEGER NOT NULL DEFAULT 0,
+  admin_notification_status TEXT NOT NULL DEFAULT 'pending' CHECK (admin_notification_status IN ('pending', 'sent', 'failed')),
+  admin_notification_sent_at TEXT,
+  admin_notification_request_id TEXT,
+  admin_notification_error TEXT,
+  admin_notification_attempts INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   paid_at TEXT,
   notes TEXT

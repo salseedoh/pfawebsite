@@ -94,3 +94,33 @@ function kitEmail(order) {
 export function confirmationEmail(orderType, order) {
   return orderType === 'class_registration' ? classEmail(order) : kitEmail(order);
 }
+
+export function adminOrderNotification(orderType, order) {
+  const isClass = orderType === 'class_registration';
+  const includesKit = isClass && Boolean(order.kit_selected);
+  const orderLabel = isClass ? (includesKit ? 'Class + Kit' : 'Class Only') : 'Kit Only';
+  const amount = `$${(Number(order.amount_cents) / 100).toFixed(2)}`;
+  const customer = `${escapeHtml(order.first_name)} ${escapeHtml(order.last_name)}`;
+  const classDetails = isClass ? `<div style="background:#eef7fb;border-left:4px solid #3678d7;border-radius:4px;padding:16px 18px;margin:24px 0;">
+      <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#2c68b5;font-weight:bold;margin-bottom:8px;">Class details</div>
+      <strong>${escapeHtml(order.class_title)}</strong><br>
+      ${escapeHtml(formatClassDate(order.class_starts_at))}<br>
+      ${escapeHtml(formatClassTime(order.class_starts_at))}<br>
+      ${escapeHtml(order.class_location)}<br>
+      Expected duration: ${escapeHtml(formatDuration(order.class_duration_minutes))}
+    </div>` : `<div style="background:#eef7fb;border-left:4px solid #3678d7;border-radius:4px;padding:16px 18px;margin:24px 0;"><strong>Local pickup ZIP:</strong> ${escapeHtml(order.pickup_zip)}</div>`;
+  const textDetails = isClass
+    ? textClassDetails(order)
+    : `Local pickup ZIP: ${order.pickup_zip}`;
+  const body = `<p style="margin-top:0;">A new Prepared Paws order has been paid.</p>
+    <div style="background:#fff4df;border-left:4px solid #e3a64a;border-radius:4px;padding:16px 18px;margin:24px 0;"><strong>Order type:</strong> ${escapeHtml(orderLabel)}<br><strong>Amount paid:</strong> ${escapeHtml(amount)}</div>
+    <p><strong>Customer:</strong> ${customer}<br><strong>Email:</strong> <a href="mailto:${escapeHtml(order.email)}" style="color:#1e5fa8;">${escapeHtml(order.email)}</a>${isClass ? `<br><strong>Language:</strong> ${escapeHtml(order.language)}` : ''}</p>
+    ${classDetails}
+    <p style="margin-bottom:0;font-size:13px;color:#46627c;">Stripe checkout session: ${escapeHtml(order.stripe_checkout_session_id)}</p>`;
+  const textBody = `A new Prepared Paws order has been paid.\n\nOrder type: ${orderLabel}\nAmount paid: ${amount}\n\nCustomer: ${order.first_name} ${order.last_name}\nEmail: ${order.email}${isClass ? `\nLanguage: ${order.language}` : ''}\n\n${textDetails}\n\nStripe checkout session: ${order.stripe_checkout_session_id}`;
+  return {
+    subject: `New Prepared Paws Order — ${orderLabel} — ${amount}`,
+    ...emailShell({ preview: `New paid ${orderLabel.toLowerCase()} order.`, body, textBody }),
+    replyTo: isClass ? 'classes@preparedpaws.com' : 'support@preparedpaws.com',
+  };
+}
