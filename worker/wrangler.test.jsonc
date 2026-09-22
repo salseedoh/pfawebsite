@@ -3,7 +3,7 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-13",
   "vars": {
-    "ALLOWED_ORIGINS": "http://localhost:8787,http://127.0.0.1:8787",
+    "ALLOWED_ORIGINS": "http://localhost:8787,http://127.0.0.1:8787,https://preparedpaws.com,https://www.preparedpaws.com",
     "TEST_MODE": "true"
   },
   "d1_databases": [

@@ -1,5 +1,7 @@
 import { KIT_PICKUP_ZIPS } from './kit-pickup-zips.js';
 import { createStripeCheckoutSession, expireStripeCheckoutSession, retrieveStripeCheckoutSession, verifyStripeWebhookSignature } from './stripe.js';
+import { confirmationEmail } from './email-templates.js';
+import { sendZeptoMail } from './zeptomail.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 // Only the live Prepared Paws domain may make browser requests to this API.
@@ -22,6 +24,7 @@ const KIT_SUBTOTAL_CENTS = 4000;
 const KIT_TAX_CENTS = 330;
 const KIT_TOTAL_CENTS = KIT_SUBTOTAL_CENTS + KIT_TAX_CENTS;
 const CHECKOUT_SUCCESS_URL = 'https://preparedpaws.com/payment-success.html?session_id={CHECKOUT_SESSION_ID}';
+const TEST_CHECKOUT_SUCCESS_URL = 'https://preparedpaws.com/payment-success.html?environment=test&session_id={CHECKOUT_SESSION_ID}';
 const CHECKOUT_CANCEL_URL = 'https://preparedpaws.com/payment-cancelled.html';
 
 function cors(request, env) {
@@ -87,7 +90,7 @@ async function startCheckout(fields, table, orderId, env) {
   return checkout;
 }
 
-function checkoutFields({ orderId, email, amount, name, description, orderType }) {
+function checkoutFields({ orderId, email, amount, name, description, orderType, env }) {
   return {
     mode: 'payment',
     'excluded_payment_method_types[0]': 'us_bank_account',
@@ -95,7 +98,7 @@ function checkoutFields({ orderId, email, amount, name, description, orderType }
     'excluded_payment_method_types[2]': 'affirm',
     'excluded_payment_method_types[3]': 'cashapp',
     'excluded_payment_method_types[4]': 'amazon_pay',
-    success_url: CHECKOUT_SUCCESS_URL,
+    success_url: env.TEST_MODE === 'true' ? TEST_CHECKOUT_SUCCESS_URL : CHECKOUT_SUCCESS_URL,
     cancel_url: `${CHECKOUT_CANCEL_URL}?${new URLSearchParams({ order_id: orderId, order_type: orderType })}`,
     customer_email: email,
     client_reference_id: orderId,
@@ -119,6 +122,7 @@ async function registrationCheckout(registration, course, env) {
     name: registration.kit_selected ? 'Prepared Paws class and first aid kit' : 'Prepared Paws pet first aid and CPR class',
     description: `${course.title} on ${course.starts_at}`,
     orderType: 'class_registration',
+    env,
   }), 'registrations', registration.id, env);
 }
 
@@ -130,6 +134,7 @@ async function kitCheckout(order, env) {
     name: 'Prepared Paws first aid kit',
     description: 'Local pickup only. We will contact you after payment with pickup details.',
     orderType: 'kit_order',
+    env,
   }), 'kit_orders', order.id, env);
 }
 
@@ -217,18 +222,50 @@ async function stripeWebhook(request, env) {
   if (!session?.id || session.client_reference_id !== orderId || !paymentIntentId || session.payment_status !== 'paid' || session.currency !== 'usd' || !['class_registration', 'kit_order'].includes(orderType)) return error('Invalid checkout session.', 400);
 
   const table = orderType === 'class_registration' ? 'registrations' : 'kit_orders';
-  const order = await env.DB.prepare(`SELECT id, amount_cents, payment_status, stripe_checkout_session_id FROM ${table} WHERE id = ?`).bind(orderId).first();
+  const order = await env.DB.prepare(`SELECT id, amount_cents, payment_status, stripe_checkout_session_id, confirmation_email_status FROM ${table} WHERE id = ?`).bind(orderId).first();
   if (!order || order.stripe_checkout_session_id !== session.id || order.amount_cents !== session.amount_total) return error('Checkout session does not match an order.', 400);
-  if (order.payment_status === 'paid') return json({ received: true });
-  if (order.payment_status !== 'awaiting_payment') return error('Order is not awaiting payment.', 409);
-
-  const update = await env.DB.prepare(`UPDATE ${table} SET payment_status = 'paid', paid_at = CURRENT_TIMESTAMP, stripe_payment_intent_id = ? WHERE id = ? AND stripe_checkout_session_id = ? AND payment_status = 'awaiting_payment'`)
-    .bind(paymentIntentId, orderId, session.id).run();
-  if (!update.meta.changes) {
-    const current = await env.DB.prepare(`SELECT payment_status FROM ${table} WHERE id = ?`).bind(orderId).first();
-    if (current?.payment_status !== 'paid') return error('Unable to record payment.', 409);
+  if (order.payment_status === 'awaiting_payment') {
+    const update = await env.DB.prepare(`UPDATE ${table} SET payment_status = 'paid', paid_at = CURRENT_TIMESTAMP, stripe_payment_intent_id = ? WHERE id = ? AND stripe_checkout_session_id = ? AND payment_status = 'awaiting_payment'`)
+      .bind(paymentIntentId, orderId, session.id).run();
+    if (!update.meta.changes) {
+      const current = await env.DB.prepare(`SELECT payment_status FROM ${table} WHERE id = ?`).bind(orderId).first();
+      if (current?.payment_status !== 'paid') return error('Unable to record payment.', 409);
+    }
+  } else if (order.payment_status !== 'paid') {
+    return error('Order is not awaiting payment.', 409);
   }
+
+  await sendConfirmationEmail(orderType, orderId, table, env);
   return json({ received: true });
+}
+
+async function sendConfirmationEmail(orderType, orderId, table, env) {
+  const order = orderType === 'class_registration'
+    ? await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.duration_minutes AS class_duration_minutes, c.location AS class_location FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first()
+    : await env.DB.prepare('SELECT * FROM kit_orders WHERE id = ?').bind(orderId).first();
+  if (!order || order.confirmation_email_status === 'sent') return;
+
+  try {
+    const template = confirmationEmail(orderType, order);
+    const result = await sendZeptoMail({
+      from: { address: 'admin@preparedpaws.com', name: 'Prepared Paws' },
+      to: [{ email_address: { address: order.email, name: `${order.first_name} ${order.last_name}` } }],
+      reply_to: [{ address: template.replyTo, name: 'Prepared Paws' }],
+      subject: template.subject,
+      htmlbody: template.htmlbody,
+      textbody: template.textbody,
+      client_reference: `prepared-paws-${orderType}-${order.id}`,
+      track_opens: false,
+      track_clicks: false,
+    }, env.ZEPTOMAIL_API_KEY);
+    await env.DB.prepare(`UPDATE ${table} SET confirmation_email_status = 'sent', confirmation_email_sent_at = CURRENT_TIMESTAMP, confirmation_email_request_id = ?, confirmation_email_error = NULL, confirmation_email_attempts = confirmation_email_attempts + 1 WHERE id = ?`)
+      .bind(clean(result.request_id), orderId).run();
+  } catch (cause) {
+    const message = clean(cause?.message || 'Unable to send confirmation email.').slice(0, 1000);
+    await env.DB.prepare(`UPDATE ${table} SET confirmation_email_status = 'failed', confirmation_email_error = ?, confirmation_email_attempts = confirmation_email_attempts + 1 WHERE id = ?`)
+      .bind(message, orderId).run();
+    throw cause;
+  }
 }
 
 async function testCheckoutRedirect(env, orderId) {
