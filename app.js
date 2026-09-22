@@ -107,9 +107,9 @@ function turnstileToken(form) {
   return form.querySelector('[name="cf-turnstile-response"]')?.value || '';
 }
 
-function showPaymentNextStep(result, firstName, itemName) {
-  const link = result.paymentLink;
-  content.innerHTML = `<div class="confirmation"><div class="success">✓</div><p class="eyebrow">Registration received</p><h2>One more step, ${escapeHtml(firstName)}.</h2><p>Your ${itemName} is reserved while payment is completed. ${link ? 'Continue to Chase to pay securely.' : 'Online payment is being connected. Your reservation is awaiting payment and is not confirmed yet.'}</p>${link ? '<a class="button" id="payment-link" href="' + escapeHtml(link) + '">Continue to secure payment</a>' : ''}<button class="text-button modal-done" type="button">Done</button></div>`;
+function redirectToCheckout(result) {
+  if (!result.checkoutUrl) throw new Error('Unable to start secure checkout. Please try again.');
+  window.location.assign(result.checkoutUrl);
 }
 
 function showClassForm() {
@@ -133,7 +133,8 @@ async function submitRegistration(event) {
   try {
     if (publicConfig.turnstileSiteKey && !turnstileToken(form)) throw new Error('Please complete the security check before continuing.');
     const result = await publicApi('/api/registrations', { method: 'POST', body: JSON.stringify({ classId: activeClass.id, email: values.email, firstName: values.firstName, lastName: values.lastName, language: values.language, kitSelected: values.kit === 'yes', privateAccessToken: activePrivateAccessToken, turnstileToken: turnstileToken(form) }) });
-    showPaymentNextStep(result, values.firstName, values.kit === 'yes' ? 'class and first aid kit' : 'class');
+    button.textContent = 'Opening secure checkout...';
+    redirectToCheckout(result);
   } catch (cause) {
     button.disabled = false;
     button.textContent = 'Continue to payment';
@@ -144,7 +145,7 @@ async function submitRegistration(event) {
 
 function showKitOnlyForm() {
   openModal();
-  content.innerHTML = `<p class="eyebrow">Pet first aid kit</p><h2>Be ready at home and on the go.</h2><p>Order the Adventure First Aid Kit on its own for <strong>$40</strong>.</p><form id="kit-only-form"><div class="form-grid"><label class="full">Email*<input name="email" type="email" autocomplete="email" required></label><label>First name*<input name="firstName" autocomplete="given-name" required></label><label>Last name*<input name="lastName" autocomplete="family-name" required></label></div><div class="turnstile-widget"></div><button class="button" type="submit">Continue to payment &middot; $40</button><p class="form-note" id="kit-note" role="status">Your order is saved before you are sent to secure payment.</p></form>`;
+  content.innerHTML = `<p class="eyebrow">Pet first aid kit</p><h2>Be ready at home and on the go.</h2><p>Order the Adventure First Aid Kit for local pickup. <strong>$40 plus $3.30 tax</strong>.</p><form id="kit-only-form"><div class="form-grid"><label class="full">Email*<input name="email" type="email" autocomplete="email" required></label><label>First name*<input name="firstName" autocomplete="given-name" required></label><label>Last name*<input name="lastName" autocomplete="family-name" required></label><label>ZIP code*<input name="pickupZip" inputmode="numeric" autocomplete="postal-code" pattern="[0-9]{5}" maxlength="5" required></label></div><div class="turnstile-widget"></div><button class="button" type="submit">Continue to payment &middot; $43.30</button><p class="form-note" id="kit-note" role="status">Local pickup is available in select ZIP codes. Your order is saved before you are sent to secure payment.</p></form>`;
   const kitForm = document.getElementById('kit-only-form');
   kitForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -157,16 +158,35 @@ function showKitOnlyForm() {
     try {
       if (publicConfig.turnstileSiteKey && !turnstileToken(form)) throw new Error('Please complete the security check before continuing.');
       const result = await publicApi('/api/kit-orders', { method: 'POST', body: JSON.stringify({ ...values, turnstileToken: turnstileToken(form) }) });
-      showPaymentNextStep(result, values.firstName, 'first aid kit');
+      button.textContent = 'Opening secure checkout...';
+      redirectToCheckout(result);
     } catch (cause) {
       button.disabled = false;
-      button.textContent = 'Continue to payment · $40';
+      button.textContent = 'Continue to payment · $43.30';
       note.textContent = cause.message;
       note.classList.add('form-error');
     }
   });
   renderTurnstile(kitForm);
 }
+
+function enableKitOrdering() {
+  const availability = document.querySelector('.kit-availability');
+  const unavailable = document.querySelector('.unavailable-link');
+  if (!availability || !unavailable) return;
+  const taxLabel = document.querySelector('.kit-price small');
+  if (taxLabel) taxLabel.textContent = 'plus $3.30 tax';
+  availability.textContent = 'Local pickup in select ZIP codes.';
+  const button = document.createElement('button');
+  button.className = 'text-link';
+  button.id = 'order-kit';
+  button.type = 'button';
+  button.innerHTML = 'Order kit <span>→</span>';
+  Object.assign(button.style, { border: '0', background: 'transparent', padding: '0', font: 'inherit', cursor: 'pointer' });
+  unavailable.replaceWith(button);
+}
+
+enableKitOrdering();
 
 document.addEventListener('click', (event) => {
   const registerButton = event.target.closest('.register-button');
@@ -176,6 +196,7 @@ document.addEventListener('click', (event) => {
     if (activeClass) { openModal(); showClassForm(); }
   }
   if (event.target.closest('[data-close], .modal-done')) closeRegistration();
+  if (event.target.closest('#order-kit')) showKitOnlyForm();
 });
 document.addEventListener('keydown', (event) => {
   if (!modal.classList.contains('open')) return;

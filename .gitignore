@@ -8,6 +8,7 @@ worker/.wrangler/
 # Local development variables can contain API keys and other secrets.
 # Keep example/template files versioned if we add them later.
 worker/.dev.vars
+worker/.dev.vars.*
 worker/.env
 worker/.env.*
 !worker/.env.example

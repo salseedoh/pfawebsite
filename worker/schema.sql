@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS registrations (
   kit_selected INTEGER NOT NULL DEFAULT 0,
   amount_cents INTEGER NOT NULL,
   payment_status TEXT NOT NULL DEFAULT 'awaiting_payment' CHECK (payment_status IN ('awaiting_payment', 'paid', 'refunded', 'cancelled')),
+  stripe_checkout_session_id TEXT UNIQUE,
+  stripe_payment_intent_id TEXT UNIQUE,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   paid_at TEXT,
   notes TEXT
@@ -36,8 +38,13 @@ CREATE TABLE IF NOT EXISTS kit_orders (
   email TEXT NOT NULL,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
-  amount_cents INTEGER NOT NULL DEFAULT 4000,
+  pickup_zip TEXT,
+  kit_subtotal_cents INTEGER NOT NULL DEFAULT 4000,
+  tax_cents INTEGER NOT NULL DEFAULT 330,
+  amount_cents INTEGER NOT NULL DEFAULT 4330,
   payment_status TEXT NOT NULL DEFAULT 'awaiting_payment' CHECK (payment_status IN ('awaiting_payment', 'paid', 'refunded', 'cancelled')),
+  stripe_checkout_session_id TEXT UNIQUE,
+  stripe_payment_intent_id TEXT UNIQUE,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   paid_at TEXT,
   notes TEXT

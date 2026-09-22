@@ -1,3 +1,6 @@
+import { KIT_PICKUP_ZIPS } from './kit-pickup-zips.js';
+import { createStripeCheckoutSession, expireStripeCheckoutSession, retrieveStripeCheckoutSession, verifyStripeWebhookSignature } from './stripe.js';
+
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 // Only the live Prepared Paws domain may make browser requests to this API.
 const APP_ORIGINS = [
@@ -15,6 +18,11 @@ const privateAccessToken = () => {
 };
 const asBoolean = (value) => value === true || value === 1 || value === '1';
 const money = (cents) => `$${(cents / 100).toFixed(2)}`;
+const KIT_SUBTOTAL_CENTS = 4000;
+const KIT_TAX_CENTS = 330;
+const KIT_TOTAL_CENTS = KIT_SUBTOTAL_CENTS + KIT_TAX_CENTS;
+const CHECKOUT_SUCCESS_URL = 'https://preparedpaws.com/payment-success.html?session_id={CHECKOUT_SESSION_ID}';
+const CHECKOUT_CANCEL_URL = 'https://preparedpaws.com/payment-cancelled.html';
 
 function cors(request, env) {
   const origin = request.headers.get('Origin');
@@ -73,6 +81,58 @@ async function verifyTurnstile(token, request, env) {
   return result.success === true;
 }
 
+async function startCheckout(fields, table, orderId, env) {
+  const checkout = await createStripeCheckoutSession(fields, env.STRIPE_SECRET_KEY);
+  await env.DB.prepare(`UPDATE ${table} SET stripe_checkout_session_id = ? WHERE id = ?`).bind(checkout.id, orderId).run();
+  return checkout;
+}
+
+function checkoutFields({ orderId, email, amount, name, description, orderType }) {
+  return {
+    mode: 'payment',
+    'excluded_payment_method_types[0]': 'us_bank_account',
+    'excluded_payment_method_types[1]': 'klarna',
+    'excluded_payment_method_types[2]': 'affirm',
+    'excluded_payment_method_types[3]': 'cashapp',
+    'excluded_payment_method_types[4]': 'amazon_pay',
+    success_url: CHECKOUT_SUCCESS_URL,
+    cancel_url: `${CHECKOUT_CANCEL_URL}?${new URLSearchParams({ order_id: orderId, order_type: orderType })}`,
+    customer_email: email,
+    client_reference_id: orderId,
+    'metadata[order_id]': orderId,
+    'metadata[order_type]': orderType,
+    'payment_intent_data[metadata][order_id]': orderId,
+    'payment_intent_data[metadata][order_type]': orderType,
+    'line_items[0][price_data][currency]': 'usd',
+    'line_items[0][price_data][product_data][name]': name,
+    'line_items[0][price_data][product_data][description]': description,
+    'line_items[0][price_data][unit_amount]': String(amount),
+    'line_items[0][quantity]': '1',
+  };
+}
+
+async function registrationCheckout(registration, course, env) {
+  return startCheckout(checkoutFields({
+    orderId: registration.id,
+    email: registration.email,
+    amount: registration.amount_cents,
+    name: registration.kit_selected ? 'Prepared Paws class and first aid kit' : 'Prepared Paws pet first aid and CPR class',
+    description: `${course.title} on ${course.starts_at}`,
+    orderType: 'class_registration',
+  }), 'registrations', registration.id, env);
+}
+
+async function kitCheckout(order, env) {
+  return startCheckout(checkoutFields({
+    orderId: order.id,
+    email: order.email,
+    amount: order.amount_cents,
+    name: 'Prepared Paws first aid kit',
+    description: 'Local pickup only. We will contact you after payment with pickup details.',
+    orderType: 'kit_order',
+  }), 'kit_orders', order.id, env);
+}
+
 async function createRegistration(request, env) {
   const body = await request.json();
   const classId = clean(body.classId);
@@ -95,8 +155,8 @@ async function createRegistration(request, env) {
   const registration = { id: id(), classId, email, firstName, lastName, language, kitSelected, amount };
   await env.DB.prepare('INSERT INTO registrations (id, class_id, email, first_name, last_name, language, kit_selected, amount_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(registration.id, classId, email, firstName, lastName, language, kitSelected ? 1 : 0, amount).run();
-  const link = kitSelected ? env.CHASE_CLASS_KIT_LINK : env.CHASE_CLASS_LINK;
-  return json({ registrationId: registration.id, paymentStatus: 'awaiting_payment', amount: amount / 100, paymentLink: link || null }, 201);
+  const checkout = await registrationCheckout({ ...registration, kit_selected: kitSelected ? 1 : 0, amount_cents: amount }, course, env);
+  return json({ registrationId: registration.id, paymentStatus: 'awaiting_payment', amount: amount / 100, checkoutUrl: checkout.url }, 201);
 }
 
 async function createKitOrder(request, env) {
@@ -104,11 +164,81 @@ async function createKitOrder(request, env) {
   const email = clean(body.email).toLowerCase();
   const firstName = clean(body.firstName);
   const lastName = clean(body.lastName);
+  const pickupZip = clean(body.pickupZip);
   if (!/^\S+@\S+\.\S+$/.test(email) || !firstName || !lastName) return error('Please provide an email, first name, and last name.');
+  if (!/^\d{5}$/.test(pickupZip)) return error('Please enter a five-digit ZIP code.');
+  if (!KIT_PICKUP_ZIPS.has(pickupZip)) return error('Local kit pickup is not available for this ZIP code.', 422);
   if (!await verifyTurnstile(clean(body.turnstileToken), request, env)) return error('Please complete the security check and try again.', 403);
-  const order = { id: id(), email, firstName, lastName };
-  await env.DB.prepare('INSERT INTO kit_orders (id, email, first_name, last_name) VALUES (?, ?, ?, ?)').bind(order.id, email, firstName, lastName).run();
-  return json({ orderId: order.id, paymentStatus: 'awaiting_payment', amount: 40, paymentLink: env.CHASE_KIT_LINK || null }, 201);
+  const order = { id: id(), email, firstName, lastName, pickupZip };
+  await env.DB.prepare('INSERT INTO kit_orders (id, email, first_name, last_name, pickup_zip, kit_subtotal_cents, tax_cents, amount_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(order.id, email, firstName, lastName, pickupZip, KIT_SUBTOTAL_CENTS, KIT_TAX_CENTS, KIT_TOTAL_CENTS).run();
+  const checkout = await kitCheckout({ ...order, amount_cents: KIT_TOTAL_CENTS }, env);
+  return json({ orderId: order.id, paymentStatus: 'awaiting_payment', amount: KIT_TOTAL_CENTS / 100, checkoutUrl: checkout.url }, 201);
+}
+
+async function paymentStatus(env, sessionId) {
+  if (!sessionId.startsWith('cs_')) return error('Payment session not found.', 404);
+  const registration = await env.DB.prepare('SELECT payment_status FROM registrations WHERE stripe_checkout_session_id = ?').bind(sessionId).first();
+  if (registration) return json({ orderType: 'class_registration', paymentStatus: registration.payment_status });
+  const kitOrder = await env.DB.prepare('SELECT payment_status FROM kit_orders WHERE stripe_checkout_session_id = ?').bind(sessionId).first();
+  if (kitOrder) return json({ orderType: 'kit_order', paymentStatus: kitOrder.payment_status });
+  return error('Payment session not found.', 404);
+}
+
+async function retryCheckout(request, env) {
+  const body = await request.json();
+  const orderId = clean(body.orderId);
+  const orderType = clean(body.orderType);
+  if (!orderId || !['class_registration', 'kit_order'].includes(orderType)) return error('This payment link is unavailable.', 404);
+  if (orderType === 'class_registration') {
+    const registration = await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first();
+    if (!registration || registration.payment_status !== 'awaiting_payment') return error('This payment link is unavailable.', 404);
+    if (registration.stripe_checkout_session_id) await expireStripeCheckoutSession(registration.stripe_checkout_session_id, env.STRIPE_SECRET_KEY);
+    const checkout = await registrationCheckout(registration, { title: registration.class_title, starts_at: registration.class_starts_at }, env);
+    return json({ checkoutUrl: checkout.url });
+  }
+  const order = await env.DB.prepare('SELECT * FROM kit_orders WHERE id = ?').bind(orderId).first();
+  if (!order || order.payment_status !== 'awaiting_payment') return error('This payment link is unavailable.', 404);
+  if (order.stripe_checkout_session_id) await expireStripeCheckoutSession(order.stripe_checkout_session_id, env.STRIPE_SECRET_KEY);
+  const checkout = await kitCheckout(order, env);
+  return json({ checkoutUrl: checkout.url });
+}
+
+async function stripeWebhook(request, env) {
+  const payload = await request.text();
+  const signature = request.headers.get('Stripe-Signature');
+  if (!await verifyStripeWebhookSignature(payload, signature, env.STRIPE_WEBHOOK_SECRET)) return error('Invalid webhook signature.', 400);
+  const event = JSON.parse(payload);
+  if (event.type !== 'checkout.session.completed') return json({ received: true });
+  const session = event?.data?.object;
+  const orderId = clean(session?.metadata?.order_id);
+  const orderType = clean(session?.metadata?.order_type);
+  const paymentIntentId = clean(session?.payment_intent);
+  if (!session?.id || session.client_reference_id !== orderId || !paymentIntentId || session.payment_status !== 'paid' || session.currency !== 'usd' || !['class_registration', 'kit_order'].includes(orderType)) return error('Invalid checkout session.', 400);
+
+  const table = orderType === 'class_registration' ? 'registrations' : 'kit_orders';
+  const order = await env.DB.prepare(`SELECT id, amount_cents, payment_status, stripe_checkout_session_id FROM ${table} WHERE id = ?`).bind(orderId).first();
+  if (!order || order.stripe_checkout_session_id !== session.id || order.amount_cents !== session.amount_total) return error('Checkout session does not match an order.', 400);
+  if (order.payment_status === 'paid') return json({ received: true });
+  if (order.payment_status !== 'awaiting_payment') return error('Order is not awaiting payment.', 409);
+
+  const update = await env.DB.prepare(`UPDATE ${table} SET payment_status = 'paid', paid_at = CURRENT_TIMESTAMP, stripe_payment_intent_id = ? WHERE id = ? AND stripe_checkout_session_id = ? AND payment_status = 'awaiting_payment'`)
+    .bind(paymentIntentId, orderId, session.id).run();
+  if (!update.meta.changes) {
+    const current = await env.DB.prepare(`SELECT payment_status FROM ${table} WHERE id = ?`).bind(orderId).first();
+    if (current?.payment_status !== 'paid') return error('Unable to record payment.', 409);
+  }
+  return json({ received: true });
+}
+
+async function testCheckoutRedirect(env, orderId) {
+  if (env.TEST_MODE !== 'true') return error('Not found.', 404);
+  const registration = await env.DB.prepare('SELECT stripe_checkout_session_id FROM registrations WHERE id = ?').bind(orderId).first();
+  const kitOrder = registration ? null : await env.DB.prepare('SELECT stripe_checkout_session_id FROM kit_orders WHERE id = ?').bind(orderId).first();
+  const sessionId = registration?.stripe_checkout_session_id || kitOrder?.stripe_checkout_session_id;
+  if (!sessionId) return error('Checkout session not found.', 404);
+  const checkout = await retrieveStripeCheckoutSession(sessionId, env.STRIPE_SECRET_KEY);
+  return Response.redirect(checkout.url, 303);
 }
 
 async function adminLogin(request, env) {
@@ -190,14 +320,18 @@ export default {
     const corsHeaders = cors(request, env);
     if (request.method === 'OPTIONS') return new Response(null, { headers: { ...corsHeaders, 'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS', 'access-control-allow-headers': 'Authorization,Content-Type', 'access-control-max-age': '86400' } });
     try {
+      if (request.method === 'POST' && url.pathname === '/api/stripe/webhook') return stripeWebhook(request, env);
+      if (request.method === 'GET' && url.pathname.startsWith('/api/test/checkout/')) return testCheckoutRedirect(env, decodeURIComponent(url.pathname.split('/').pop()));
       if (request.method === 'GET' && url.pathname === '/api/classes') return json(await listClasses(env), 200, corsHeaders);
       if (request.method === 'GET' && url.pathname.startsWith('/api/private-classes/')) {
         const course = await privateClass(env, decodeURIComponent(url.pathname.split('/').pop()));
         return course ? json(course, 200, corsHeaders) : error('This private class link is no longer active.', 404);
       }
       if (request.method === 'GET' && url.pathname === '/api/public-config') return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY || null }, 200, corsHeaders);
+      if (request.method === 'GET' && url.pathname.startsWith('/api/payment-status/')) { const response = await paymentStatus(env, decodeURIComponent(url.pathname.split('/').pop())); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/registrations') { const response = await createRegistration(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/kit-orders') { const response = await createKitOrder(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
+      if (request.method === 'POST' && url.pathname === '/api/payment-retry') { const response = await retryCheckout(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/admin/login') { const response = await adminLogin(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (!await authenticate(request, env)) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
       if (request.method === 'GET' && url.pathname === '/api/admin/classes') return json(await listClasses(env, true), 200, corsHeaders);

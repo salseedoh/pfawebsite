@@ -1,0 +1,16 @@
+{
+  "name": "prepared-paws-api-test",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-13",
+  "vars": {
+    "ALLOWED_ORIGINS": "http://localhost:8787,http://127.0.0.1:8787",
+    "TEST_MODE": "true"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "prepared-paws-test",
+      "database_id": "2241c5c5-a4b8-4699-b12b-5c13b8f762e6"
+    }
+  ]
+}

@@ -4,7 +4,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:migrate": "wrangler d1 migrations apply prepared-paws-production --remote"
+    "db:migrate": "wrangler d1 migrations apply prepared-paws-production --remote",
+    "dev:test": "wrangler dev --config wrangler.test.jsonc",
+    "deploy:test": "wrangler deploy --config wrangler.test.jsonc",
+    "db:init:test": "wrangler d1 execute prepared-paws-test --remote --config wrangler.test.jsonc --file schema.sql"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

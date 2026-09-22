@@ -12,13 +12,18 @@ Before the system is used, add these secrets in the Cloudflare Worker settings:
 - `ADMIN_PASSWORD`
 - `SESSION_SECRET` (a new random value, at least 32 characters)
 
-When Chase QuickAccept payment links are ready, add these secrets as well:
+For Stripe Checkout, add these secrets as well:
 
-- `CHASE_CLASS_LINK`
-- `CHASE_CLASS_KIT_LINK`
-- `CHASE_KIT_LINK`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
 
 The Worker source and D1 schema are in [worker](worker/). It is configured to use the production Worker at `https://prepared-paws-api.salcido-heriberto.workers.dev`.
+
+## Stripe test environment
+
+Stripe Checkout is tested with the separate `prepared-paws-api-test` Worker and `prepared-paws-test` D1 database. The test Worker configuration is in [worker/wrangler.test.jsonc](worker/wrangler.test.jsonc). Initialize a new test database from the current schema with `npm.cmd run db:init:test`, then deploy the test Worker with `npm.cmd run deploy:test`.
+
+Keep Stripe sandbox credentials out of Git. Add them only as Cloudflare Worker secrets to the test Worker when the test deployment is ready.
 
 ## Publishing the website
 
