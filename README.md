@@ -11,6 +11,12 @@ Before the system is used, add these secrets in the Cloudflare Worker settings:
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 - `SESSION_SECRET` (a new random value, at least 32 characters)
+- `TURNSTILE_SECRET_KEY` (the existing customer-form Turnstile secret)
+
+To protect the admin login, also add these Worker variables:
+
+- `ADMIN_TURNSTILE_SITE_KEY` (the public site key for a new admin-login Turnstile widget)
+- `ADMIN_TURNSTILE_SECRET_KEY` (the corresponding secret key)
 
 For Stripe Checkout, add these secrets as well:
 

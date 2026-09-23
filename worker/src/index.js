@@ -3,7 +3,8 @@ import { createStripeCheckoutSession, expireStripeCheckoutSession, retrieveStrip
 import { adminOrderNotification, confirmationEmail } from './email-templates.js';
 import { sendZeptoMail } from './zeptomail.js';
 
-const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
+const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
+const CHECKOUT_HOLD_MINUTES = 35;
 // Only the live Prepared Paws domain may make browser requests to this API.
 const APP_ORIGINS = [
   'https://preparedpaws.com',
@@ -72,21 +73,56 @@ async function privateClass(env, accessToken) {
 }
 
 async function verifyTurnstile(token, request, env) {
-  if (!env.TURNSTILE_SECRET_KEY) return true;
-  if (!token) return false;
-  const form = new FormData();
-  form.append('secret', env.TURNSTILE_SECRET_KEY);
-  form.append('response', token);
-  const remoteIp = request.headers.get('CF-Connecting-IP');
-  if (remoteIp) form.append('remoteip', remoteIp);
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
-  const result = await response.json();
-  return result.success === true;
+  if (!env.TURNSTILE_SECRET_KEY || !token) return false;
+  try {
+    const form = new FormData();
+    form.append('secret', env.TURNSTILE_SECRET_KEY);
+    form.append('response', token);
+    const remoteIp = request.headers.get('CF-Connecting-IP');
+    if (remoteIp) form.append('remoteip', remoteIp);
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
+    const result = await response.json();
+    return result.success === true;
+  } catch (cause) {
+    console.error('Turnstile Siteverify request failed.', cause);
+    return false;
+  }
 }
+
+async function verifyAdminTurnstile(token, request, env) {
+  if (!env.ADMIN_TURNSTILE_SECRET_KEY || !token) return false;
+  try {
+    const form = new FormData();
+    form.append('secret', env.ADMIN_TURNSTILE_SECRET_KEY);
+    form.append('response', token);
+    const remoteIp = request.headers.get('CF-Connecting-IP');
+    if (remoteIp) form.append('remoteip', remoteIp);
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
+    const result = await response.json();
+    return result.success === true;
+  } catch (cause) {
+    console.error('Admin Turnstile Siteverify request failed.', cause);
+    return false;
+  }
+}
+
+async function withinRateLimit(request, env, scope, maximum, windowMinutes, identifier = '') {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const window = Math.floor(Date.now() / (windowMinutes * 60 * 1000));
+  const key = `${scope}:${window}:${ip}:${identifier}`;
+  const expiresAt = new Date((window + 1) * windowMinutes * 60 * 1000).toISOString();
+  await env.DB.prepare("DELETE FROM request_limits WHERE strftime('%s', expires_at) < strftime('%s', 'now')").run();
+  const result = await env.DB.prepare('INSERT INTO request_limits (key, count, expires_at) VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET count = count + 1 RETURNING count')
+    .bind(key, expiresAt).first();
+  return Number(result?.count) <= maximum;
+}
+
+const activeCheckoutSql = "(payment_status = 'paid' OR (payment_status = 'awaiting_payment' AND strftime('%s', COALESCE(checkout_expires_at, datetime(created_at, '+30 minutes'))) > strftime('%s', 'now')))";
 
 async function startCheckout(fields, table, orderId, env) {
   const checkout = await createStripeCheckoutSession(fields, env.STRIPE_SECRET_KEY);
-  await env.DB.prepare(`UPDATE ${table} SET stripe_checkout_session_id = ? WHERE id = ?`).bind(checkout.id, orderId).run();
+  const expiresAt = new Date(Number(checkout.expires_at) * 1000).toISOString();
+  await env.DB.prepare(`UPDATE ${table} SET stripe_checkout_session_id = ?, checkout_expires_at = ? WHERE id = ?`).bind(checkout.id, expiresAt, orderId).run();
   return checkout;
 }
 
@@ -106,6 +142,7 @@ function checkoutFields({ orderId, email, amount, name, description, orderType, 
     'metadata[order_type]': orderType,
     'payment_intent_data[metadata][order_id]': orderId,
     'payment_intent_data[metadata][order_type]': orderType,
+    expires_at: String(Math.floor(Date.now() / 1000) + CHECKOUT_HOLD_MINUTES * 60),
     'line_items[0][price_data][currency]': 'usd',
     'line_items[0][price_data][product_data][name]': name,
     'line_items[0][price_data][product_data][description]': description,
@@ -149,12 +186,13 @@ async function createRegistration(request, env) {
   const accessToken = clean(body.privateAccessToken);
   if (!classId || !/^\S+@\S+\.\S+$/.test(email) || !firstName || !lastName) return error('Please provide an email, first name, and last name.');
   if (!await verifyTurnstile(clean(body.turnstileToken), request, env)) return error('Please complete the security check and try again.', 403);
+  if (!await withinRateLimit(request, env, 'registration', 5, 30)) return error('Please wait a few minutes before trying again.', 429);
   const course = await env.DB.prepare("SELECT * FROM classes WHERE id = ? AND status = 'open'").bind(classId).first();
   if (!course) return error('This class is no longer open for registration.', 404);
   if (course.visibility === 'private' && (!accessToken || accessToken !== course.private_access_token)) return error('This private class link is no longer active.', 404);
-  const existing = await env.DB.prepare("SELECT id FROM registrations WHERE class_id = ? AND email = ? AND payment_status IN ('awaiting_payment', 'paid') LIMIT 1").bind(classId, email).first();
+  const existing = await env.DB.prepare(`SELECT id FROM registrations WHERE class_id = ? AND email = ? AND ${activeCheckoutSql} LIMIT 1`).bind(classId, email).first();
   if (existing) return error('This email is already registered for this class. Each student must register with their own email address.', 409);
-  const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM registrations WHERE class_id = ? AND payment_status IN ('awaiting_payment', 'paid')").bind(classId).first();
+  const count = await env.DB.prepare(`SELECT COUNT(*) AS count FROM registrations WHERE class_id = ? AND ${activeCheckoutSql}`).bind(classId).first();
   if (count.count >= course.max_students) return error('This class is now full. Please choose another date.', 409);
   const amount = kitSelected ? course.class_with_kit_price_cents : course.class_price_cents;
   const registration = { id: id(), classId, email, firstName, lastName, language, kitSelected, amount };
@@ -174,6 +212,7 @@ async function createKitOrder(request, env) {
   if (!/^\d{5}$/.test(pickupZip)) return error('Please enter a five-digit ZIP code.');
   if (!KIT_PICKUP_ZIPS.has(pickupZip)) return error('Local kit pickup is not available for this ZIP code.', 422);
   if (!await verifyTurnstile(clean(body.turnstileToken), request, env)) return error('Please complete the security check and try again.', 403);
+  if (!await withinRateLimit(request, env, 'kit-order', 5, 30)) return error('Please wait a few minutes before trying again.', 429);
   const order = { id: id(), email, firstName, lastName, pickupZip };
   await env.DB.prepare('INSERT INTO kit_orders (id, email, first_name, last_name, pickup_zip, kit_subtotal_cents, tax_cents, amount_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(order.id, email, firstName, lastName, pickupZip, KIT_SUBTOTAL_CENTS, KIT_TAX_CENTS, KIT_TOTAL_CENTS).run();
@@ -195,15 +234,16 @@ async function retryCheckout(request, env) {
   const orderId = clean(body.orderId);
   const orderType = clean(body.orderType);
   if (!orderId || !['class_registration', 'kit_order'].includes(orderType)) return error('This payment link is unavailable.', 404);
+  if (!await withinRateLimit(request, env, 'payment-retry', 10, 15)) return error('Please wait a few minutes before trying again.', 429);
   if (orderType === 'class_registration') {
     const registration = await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first();
-    if (!registration || registration.payment_status !== 'awaiting_payment') return error('This payment link is unavailable.', 404);
+    if (!registration || registration.payment_status !== 'awaiting_payment' || (registration.checkout_expires_at && Date.parse(registration.checkout_expires_at) <= Date.now())) return error('This payment link has expired. Please start a new registration.', 404);
     if (registration.stripe_checkout_session_id) await expireStripeCheckoutSession(registration.stripe_checkout_session_id, env.STRIPE_SECRET_KEY);
     const checkout = await registrationCheckout(registration, { title: registration.class_title, starts_at: registration.class_starts_at }, env);
     return json({ checkoutUrl: checkout.url });
   }
   const order = await env.DB.prepare('SELECT * FROM kit_orders WHERE id = ?').bind(orderId).first();
-  if (!order || order.payment_status !== 'awaiting_payment') return error('This payment link is unavailable.', 404);
+  if (!order || order.payment_status !== 'awaiting_payment' || (order.checkout_expires_at && Date.parse(order.checkout_expires_at) <= Date.now())) return error('This payment link has expired. Please start a new order.', 404);
   if (order.stripe_checkout_session_id) await expireStripeCheckoutSession(order.stripe_checkout_session_id, env.STRIPE_SECRET_KEY);
   const checkout = await kitCheckout(order, env);
   return json({ checkoutUrl: checkout.url });
@@ -309,10 +349,12 @@ async function testCheckoutRedirect(env, orderId) {
 }
 
 async function adminLogin(request, env) {
-  const { email, password } = await request.json();
+  const { email, password, turnstileToken } = await request.json();
   if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD || !env.SESSION_SECRET) return error('Admin access has not been configured.', 503);
-  if (clean(email).toLowerCase() !== env.ADMIN_EMAIL.toLowerCase() || password !== env.ADMIN_PASSWORD) return error('Incorrect email or password.', 401);
-  const payload = btoa(JSON.stringify({ exp: Date.now() + 8 * 60 * 60 * 1000 }));
+  if (!await verifyAdminTurnstile(clean(turnstileToken), request, env)) return error('Please complete the security check and try again.', 403);
+  if (!await withinRateLimit(request, env, 'admin-login', 5, 15, clean(email).toLowerCase())) return error('Please wait 15 minutes before trying again.', 429);
+  if (clean(email).toLowerCase() !== env.ADMIN_EMAIL.toLowerCase() || password !== env.ADMIN_PASSWORD) return error('Unable to sign in. Please check your credentials and try again.', 401);
+  const payload = btoa(JSON.stringify({ exp: Date.now() + 2 * 60 * 60 * 1000 }));
   return json({ token: `${payload}.${await sign(payload, env.SESSION_SECRET)}` });
 }
 
@@ -394,8 +436,13 @@ export default {
         const course = await privateClass(env, decodeURIComponent(url.pathname.split('/').pop()));
         return course ? json(course, 200, corsHeaders) : error('This private class link is no longer active.', 404);
       }
-      if (request.method === 'GET' && url.pathname === '/api/public-config') return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY || null }, 200, corsHeaders);
-      if (request.method === 'GET' && url.pathname.startsWith('/api/payment-status/')) { const response = await paymentStatus(env, decodeURIComponent(url.pathname.split('/').pop())); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
+      if (request.method === 'GET' && url.pathname === '/api/public-config') return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY || null, adminTurnstileSiteKey: env.ADMIN_TURNSTILE_SITE_KEY || null }, 200, corsHeaders);
+      if (request.method === 'GET' && url.pathname.startsWith('/api/payment-status/')) {
+        const response = !await withinRateLimit(request, env, 'payment-status', 30, 15)
+          ? error('Please wait a few minutes before checking payment status again.', 429)
+          : await paymentStatus(env, decodeURIComponent(url.pathname.split('/').pop()));
+        return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } });
+      }
       if (request.method === 'POST' && url.pathname === '/api/registrations') { const response = await createRegistration(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/kit-orders') { const response = await createKitOrder(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/payment-retry') { const response = await retryCheckout(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
@@ -410,6 +457,9 @@ export default {
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/kit-orders/')) { const response = await updateKitOrder(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'GET' && url.pathname === '/api/admin/export.csv') { const rows = (await registrations(env)).filter((row) => row.payment_status === 'paid'); return new Response(csv(rows), { headers: { ...corsHeaders, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="protrainings-registrations.csv"' } }); }
       return new Response('Prepared Paws API', { status: 200, headers: corsHeaders });
-    } catch (cause) { return new Response(JSON.stringify({ error: 'Unable to complete that request.' }), { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
+    } catch (cause) {
+      console.error('Worker request failed.', cause);
+      return new Response(JSON.stringify({ error: 'Unable to complete that request.' }), { status: 500, headers: { ...JSON_HEADERS, ...corsHeaders } });
+    }
   }
 };

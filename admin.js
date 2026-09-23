@@ -1,6 +1,7 @@
 const API_URL = 'https://prepared-paws-api.salcido-heriberto.workers.dev';
-const tokenKey = 'preparedPawsAdminToken';
-let adminToken = sessionStorage.getItem(tokenKey);
+let adminToken = null;
+let adminTurnstileSiteKey = null;
+let turnstileScript;
 let classes = [];
 let registrations = [];
 let kitOrders = [];
@@ -19,6 +20,34 @@ const formatDuration = (value) => {
   return [hourText, minuteText].filter(Boolean).join(' ');
 };
 const privateClassLink = (course) => `https://preparedpaws.com/?private=${encodeURIComponent(course.private_access_token)}`;
+
+function loadTurnstile() {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (turnstileScript) return turnstileScript;
+  turnstileScript = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.onload = () => resolve(window.turnstile);
+    script.onerror = () => reject(new Error('Unable to load the security check. Please refresh and try again.'));
+    document.head.append(script);
+  });
+  return turnstileScript;
+}
+
+async function initializeLoginSecurity() {
+  const message = byId('login-message');
+  try {
+    const config = await api('/api/public-config');
+    adminTurnstileSiteKey = config.adminTurnstileSiteKey;
+    if (!adminTurnstileSiteKey) throw new Error('Admin security check has not been configured.');
+    const turnstile = await loadTurnstile();
+    turnstile.render('#admin-turnstile', { sitekey: adminTurnstileSiteKey, theme: 'light' });
+  } catch (cause) {
+    message.textContent = cause.message;
+    message.classList.add('form-error');
+  }
+}
 
 async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -103,7 +132,6 @@ function showDashboard() {
 
 function logout() {
   adminToken = null;
-  sessionStorage.removeItem(tokenKey);
   byId('dashboard').classList.add('hidden');
   byId('admin-login').classList.remove('hidden');
   byId('admin-password').value = '';
@@ -115,9 +143,10 @@ byId('login-form').addEventListener('submit', async (event) => {
   const loginMessage = byId('login-message');
   loginMessage.textContent = 'Opening dashboard...';
   try {
-    const result = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ email: form.get('email'), password: form.get('password') }) });
+    const turnstileToken = document.querySelector('[name="cf-turnstile-response"]')?.value || '';
+    if (!adminTurnstileSiteKey || !turnstileToken) throw new Error('Please complete the security check before continuing.');
+    const result = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ email: form.get('email'), password: form.get('password'), turnstileToken }) });
     adminToken = result.token;
-    sessionStorage.setItem(tokenKey, adminToken);
     loginMessage.textContent = '';
     showDashboard();
   } catch (cause) {
@@ -206,4 +235,4 @@ byId('download-csv').addEventListener('click', async () => {
 });
 
 byId('log-out').addEventListener('click', logout);
-if (adminToken) showDashboard();
+initializeLoginSecurity();

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS registrations (
   amount_cents INTEGER NOT NULL,
   payment_status TEXT NOT NULL DEFAULT 'awaiting_payment' CHECK (payment_status IN ('awaiting_payment', 'paid', 'refunded', 'cancelled')),
   stripe_checkout_session_id TEXT UNIQUE,
+  checkout_expires_at TEXT,
   stripe_payment_intent_id TEXT UNIQUE,
   confirmation_email_status TEXT NOT NULL DEFAULT 'pending' CHECK (confirmation_email_status IN ('pending', 'sent', 'failed')),
   confirmation_email_sent_at TEXT,
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS kit_orders (
   amount_cents INTEGER NOT NULL DEFAULT 4330,
   payment_status TEXT NOT NULL DEFAULT 'awaiting_payment' CHECK (payment_status IN ('awaiting_payment', 'paid', 'refunded', 'cancelled')),
   stripe_checkout_session_id TEXT UNIQUE,
+  checkout_expires_at TEXT,
   stripe_payment_intent_id TEXT UNIQUE,
   confirmation_email_status TEXT NOT NULL DEFAULT 'pending' CHECK (confirmation_email_status IN ('pending', 'sent', 'failed')),
   confirmation_email_sent_at TEXT,
@@ -71,3 +73,9 @@ CREATE TABLE IF NOT EXISTS kit_orders (
 );
 
 CREATE INDEX IF NOT EXISTS kit_orders_payment_status_idx ON kit_orders(payment_status);
+
+CREATE TABLE IF NOT EXISTS request_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL
+);

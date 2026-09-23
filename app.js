@@ -230,9 +230,11 @@ nav.addEventListener('click', (event) => {
 });
 
 async function initialize() {
-  try { publicConfig = await publicApi('/api/public-config'); } catch { /* Registration remains usable until Turnstile is configured. */ }
   const privateAccessToken = new URLSearchParams(window.location.search).get('private');
   if (privateAccessToken) {
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('private');
+    window.history.replaceState({}, document.title, `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
     const robots = document.createElement('meta');
     robots.name = 'robots';
     robots.content = 'noindex, nofollow';
@@ -247,6 +249,8 @@ async function initialize() {
       content.innerHTML = `<div class="confirmation"><p class="eyebrow">Private class</p><h2 id="registration-title">This link is unavailable.</h2><p>${escapeHtml(cause.message || 'Please contact us for help with your registration.')}</p><a class="button" href="mailto:contact@preparedpaws.com">Email us</a><button class="text-button modal-done" type="button">Done</button></div>`;
     }
   }
+  window.gtag?.('event', 'page_view', { page_location: window.location.href, page_title: document.title });
+  try { publicConfig = await publicApi('/api/public-config'); } catch { /* Server-side verification remains required. */ }
   loadClasses();
 }
 

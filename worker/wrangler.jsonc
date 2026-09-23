@@ -3,7 +3,14 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-13",
   "vars": {
+    "ADMIN_TURNSTILE_SITE_KEY": "0x4AAAAAAFBgL6w6OcvzCoBw",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAE9QzksNExiIZJop"
+  },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
   },
   "d1_databases": [
     {
