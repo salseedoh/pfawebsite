@@ -64,12 +64,13 @@ function classEmail(registration) {
       Expected duration: ${escapeHtml(formatDuration(registration.class_duration_minutes))}
     </div>
     <p><strong>Please bring:</strong></p>
-    <ul style="padding-left:22px;margin-top:0;"><li>One bath-sized towel</li><li>A 6-foot leash or rope</li></ul>
+    <ul style="padding-left:22px;margin-top:0;"><li>One bath-sized towel</li><li>A 6-foot leash or similar, soft non-abrasive strap</li></ul>
     <p>Please do not bring a retractable leash; it does not work well with the demonstrations.</p>
     <p><strong>Please leave live pets at home.</strong> We provide demo dogs for hands-on practice. These demo dogs stay with Prepared Paws after class.</p>
     ${kitNote}
+    <p>Watch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.</p>
     <p style="margin-bottom:0;">Questions about your class? Reply to this email and our class team will be happy to help.</p>`;
-  const textBody = `Hi ${registration.first_name},\n\nThank you for registering with Prepared Paws. Your payment was received and your place is confirmed.\n\n${details}\n\nPlease bring:\n- One bath-sized towel\n- A 6-foot leash or rope\n\nPlease do not bring a retractable leash; it does not work well with the demonstrations.\n\nPlease leave live pets at home. We provide demo dogs for hands-on practice. These demo dogs stay with Prepared Paws after class.${registration.kit_selected ? '\n\nYour Prepared Paws first aid kit will be provided when you arrive for class. There is no separate pickup needed.' : ''}\n\nQuestions about your class? Reply to this email and our class team will be happy to help.\n\nPrepared Paws\n${WEBSITE_URL}`;
+  const textBody = `Hi ${registration.first_name},\n\nThank you for registering with Prepared Paws. Your payment was received and your place is confirmed.\n\n${details}\n\nPlease bring:\n- One bath-sized towel\n- A 6-foot leash or similar, soft non-abrasive strap\n\nPlease do not bring a retractable leash; it does not work well with the demonstrations.\n\nPlease leave live pets at home. We provide demo dogs for hands-on practice. These demo dogs stay with Prepared Paws after class.${registration.kit_selected ? '\n\nYour Prepared Paws first aid kit will be provided when you arrive for class. There is no separate pickup needed.' : ''}\n\nWatch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.\n\nQuestions about your class? Reply to this email and our class team will be happy to help.\n\nPrepared Paws\n${WEBSITE_URL}`;
   return { subject, ...emailShell({ preview: 'Your Prepared Paws class registration is confirmed.', body, textBody }), replyTo: 'classes@preparedpaws.com' };
 }
 
