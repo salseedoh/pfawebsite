@@ -49,8 +49,23 @@ function emailShell({ preview, body, textBody }) {
 function classEmail(registration) {
   const firstName = escapeHtml(registration.first_name);
   const details = textClassDetails(registration);
+  const isVirtual = Boolean(registration.virtual_join_url);
+  const joinLink = isVirtual
+    ? `<p style="margin:0 0 22px;"><a href="${escapeHtml(registration.virtual_join_url)}" style="display:inline-block;background:#3678d7;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 18px;border-radius:6px;">Join Zoom class</a></p>`
+    : '';
+  const preparation = isVirtual
+    ? `<p><strong>Please have these items ready for class:</strong></p>
+      <ul style="padding-left:22px;margin-top:0;"><li>One bath-sized towel</li><li>A 6-foot leash or similar, soft non-abrasive strap</li></ul>
+      <p>Please do not use a retractable leash; it does not work well with the demonstrations.</p>
+      <p><strong>Please keep live pets safely at home.</strong> We provide demo dogs for hands-on practice.</p>`
+    : `<p><strong>Please bring:</strong></p>
+      <ul style="padding-left:22px;margin-top:0;"><li>One bath-sized towel</li><li>A 6-foot leash or similar, soft non-abrasive strap</li></ul>
+      <p>Please do not bring a retractable leash; it does not work well with the demonstrations.</p>
+      <p><strong>Please leave live pets at home.</strong> We provide demo dogs for hands-on practice. These demo dogs stay with Prepared Paws after class.</p>`;
   const kitNote = registration.kit_selected
-    ? '<p style="margin:22px 0 0;"><strong>Your Prepared Paws first aid kit will be provided when you arrive for class.</strong> There is no separate pickup needed.</p>'
+    ? (isVirtual
+      ? '<p style="margin:22px 0 0;"><strong>Your Prepared Paws first aid kit is included.</strong> We will contact you separately to arrange how you receive it.</p>'
+      : '<p style="margin:22px 0 0;"><strong>Your Prepared Paws first aid kit will be provided when you arrive for class.</strong> There is no separate pickup needed.</p>')
     : '';
   const subject = registration.kit_selected ? 'Your Prepared Paws Class + Kit Is Confirmed' : 'Your Prepared Paws Class Is Confirmed';
   const body = `<p style="margin-top:0;">Hi ${firstName},</p>
@@ -63,14 +78,18 @@ function classEmail(registration) {
       ${escapeHtml(registration.class_location)}<br>
       Expected duration: ${escapeHtml(formatDuration(registration.class_duration_minutes))}
     </div>
-    <p><strong>Please bring:</strong></p>
-    <ul style="padding-left:22px;margin-top:0;"><li>One bath-sized towel</li><li>A 6-foot leash or similar, soft non-abrasive strap</li></ul>
-    <p>Please do not bring a retractable leash; it does not work well with the demonstrations.</p>
-    <p><strong>Please leave live pets at home.</strong> We provide demo dogs for hands-on practice. These demo dogs stay with Prepared Paws after class.</p>
+    ${joinLink}
+    ${preparation}
     ${kitNote}
     <p>Watch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.</p>
     <p style="margin-bottom:0;">Questions about your class? Reply to this email and our class team will be happy to help.</p>`;
-  const textBody = `Hi ${registration.first_name},\n\nThank you for registering with Prepared Paws. Your payment was received and your place is confirmed.\n\n${details}\n\nPlease bring:\n- One bath-sized towel\n- A 6-foot leash or similar, soft non-abrasive strap\n\nPlease do not bring a retractable leash; it does not work well with the demonstrations.\n\nPlease leave live pets at home. We provide demo dogs for hands-on practice. These demo dogs stay with Prepared Paws after class.${registration.kit_selected ? '\n\nYour Prepared Paws first aid kit will be provided when you arrive for class. There is no separate pickup needed.' : ''}\n\nWatch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.\n\nQuestions about your class? Reply to this email and our class team will be happy to help.\n\nPrepared Paws\n${WEBSITE_URL}`;
+  const preparationText = isVirtual
+    ? 'Please have these items ready for class:\n- One bath-sized towel\n- A 6-foot leash or similar, soft non-abrasive strap\n\nPlease do not use a retractable leash; it does not work well with the demonstrations.\n\nPlease keep live pets safely at home. We provide demo dogs for hands-on practice.'
+    : 'Please bring:\n- One bath-sized towel\n- A 6-foot leash or similar, soft non-abrasive strap\n\nPlease do not bring a retractable leash; it does not work well with the demonstrations.\n\nPlease leave live pets at home. We provide demo dogs for hands-on practice. These demo dogs stay with Prepared Paws after class.';
+  const kitText = registration.kit_selected
+    ? (isVirtual ? '\n\nYour Prepared Paws first aid kit is included. We will contact you separately to arrange how you receive it.' : '\n\nYour Prepared Paws first aid kit will be provided when you arrive for class. There is no separate pickup needed.')
+    : '';
+  const textBody = `Hi ${registration.first_name},\n\nThank you for registering with Prepared Paws. Your payment was received and your place is confirmed.\n\n${details}${isVirtual ? `\n\nJoin Zoom class: ${registration.virtual_join_url}` : ''}\n\n${preparationText}${kitText}\n\nWatch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.\n\nQuestions about your class? Reply to this email and our class team will be happy to help.\n\nPrepared Paws\n${WEBSITE_URL}`;
   return { subject, ...emailShell({ preview: 'Your Prepared Paws class registration is confirmed.', body, textBody }), replyTo: 'classes@preparedpaws.com' };
 }
 
