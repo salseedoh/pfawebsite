@@ -3,7 +3,12 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-13",
   "vars": {
-    "ALLOWED_ORIGINS": "http://localhost:8787,http://127.0.0.1:8787,https://preparedpaws.com,https://www.preparedpaws.com",
+    "ALLOWED_ORIGINS": "http://localhost:8787,http://127.0.0.1:8787,http://localhost:8788,http://127.0.0.1:8788,https://preparedpaws.com,https://www.preparedpaws.com",
+    "JAAS_APP_ID": "vpaas-magic-cookie-02c357287a16424c934a7e76752340f5",
+    "JAAS_KEY_ID": "vpaas-magic-cookie-02c357287a16424c934a7e76752340f5/04820e",
+    "ADMIN_TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "PUBLIC_SITE_URL": "http://localhost:8788",
     "TEST_MODE": "true"
   },
   "d1_databases": [

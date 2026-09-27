@@ -1,10 +1,13 @@
-const API_URL = 'https://prepared-paws-api.salcido-heriberto.workers.dev';
+const API_URL = new URLSearchParams(window.location.search).get('environment') === 'test'
+  ? 'https://prepared-paws-api-test.salcido-heriberto.workers.dev'
+  : 'https://prepared-paws-api.salcido-heriberto.workers.dev';
 let adminToken = null;
 let adminTurnstileSiteKey = null;
 let turnstileScript;
 let classes = [];
 let registrations = [];
 let kitOrders = [];
+let jaasApiPromise;
 
 const byId = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
@@ -20,6 +23,20 @@ const formatDuration = (value) => {
   return [hourText, minuteText].filter(Boolean).join(' ');
 };
 const privateClassLink = (course) => `https://preparedpaws.com/?private=${encodeURIComponent(course.private_access_token)}`;
+
+function loadJaasApi(appId) {
+  if (window.JitsiMeetExternalAPI) return Promise.resolve();
+  if (jaasApiPromise) return jaasApiPromise;
+  jaasApiPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://8x8.vc/${encodeURIComponent(appId)}/external_api.js`;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Unable to load the virtual classroom. Please check your connection and try again.'));
+    document.head.append(script);
+  });
+  return jaasApiPromise;
+}
 
 function loadTurnstile() {
   if (window.turnstile) return Promise.resolve(window.turnstile);
@@ -77,9 +94,10 @@ function renderClasses() {
     const paid = courseRegistrations.filter((registration) => registration.payment_status === 'paid').length;
     const duration = formatDuration(course.duration_minutes);
     const isPrivate = course.visibility === 'private';
+    const isVirtual = Boolean(course.is_virtual);
     return `<article class="admin-class-card">
-      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)} ${isPrivate ? '<span class="private-badge">Private</span>' : ''}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${courseRegistrations.length} registrations</p></div>
-      <div class="class-admin-actions"><span>${money(course.class_price)} class &middot; ${money(course.class_with_kit_price)} with kit</span>${isPrivate ? `<div class="private-class-tools"><button class="button button-small copy-private-link" type="button" data-private-link="${escapeHtml(privateClassLink(course))}">Copy private link</button><button class="text-button regenerate-private-link" type="button" data-class-id="${course.id}">Generate new link</button></div>` : ''}<label>Status<select class="class-status" data-class-id="${course.id}"><option value="open" ${course.status === 'open' ? 'selected' : ''}>Open</option><option value="closed" ${course.status === 'closed' ? 'selected' : ''}>Closed</option><option value="cancelled" ${course.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label></div>
+      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)} ${isPrivate ? '<span class="private-badge">Private</span>' : ''} ${isVirtual ? '<span class="virtual-badge">Virtual</span>' : ''}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${courseRegistrations.length} registrations</p></div>
+      <div class="class-admin-actions"><span>${money(course.class_price)} class &middot; ${money(course.class_with_kit_price)} with kit</span>${isVirtual ? `<button class="button button-small launch-virtual-classroom" type="button" data-class-id="${course.id}">Launch virtual classroom</button>` : ''}${isPrivate ? `<div class="private-class-tools"><button class="button button-small copy-private-link" type="button" data-private-link="${escapeHtml(privateClassLink(course))}">Copy private link</button><button class="text-button regenerate-private-link" type="button" data-class-id="${course.id}">Generate new link</button></div>` : ''}<label>Status<select class="class-status" data-class-id="${course.id}"><option value="open" ${course.status === 'open' ? 'selected' : ''}>Open</option><option value="closed" ${course.status === 'closed' ? 'selected' : ''}>Closed</option><option value="cancelled" ${course.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label></div>
     </article>`;
   }).join('');
 }
@@ -157,14 +175,15 @@ byId('login-form').addEventListener('submit', async (event) => {
 
 byId('class-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const values = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form));
   try {
     message('Publishing class...');
-    const result = await api('/api/admin/classes', { method: 'POST', body: JSON.stringify({ ...values, visibility: values.visibility === 'private' ? 'private' : 'public', startsAt: new Date(values.startsAt).toISOString() }) });
-    event.currentTarget.reset();
-    event.currentTarget.classPrice.value = '125';
-    event.currentTarget.classWithKitPrice.value = '150';
-    event.currentTarget.maxStudents.value = '10';
+    const result = await api('/api/admin/classes', { method: 'POST', body: JSON.stringify({ ...values, isVirtual: values.isVirtual === 'true', visibility: values.visibility === 'private' ? 'private' : 'public', startsAt: new Date(values.startsAt).toISOString() }) });
+    form.reset();
+    form.classPrice.value = '125';
+    form.classWithKitPrice.value = '150';
+    form.maxStudents.value = '10';
     message(result.privateAccessToken ? 'Private class created. Copy its private registration link below.' : 'Class published. It is now visible on the website.');
     await loadDashboard();
   } catch (cause) { message(cause.message, true); }
@@ -181,6 +200,30 @@ byId('admin-class-list').addEventListener('change', async (event) => {
 });
 
 byId('admin-class-list').addEventListener('click', async (event) => {
+  const launchButton = event.target.closest('.launch-virtual-classroom');
+  if (launchButton) {
+    const classroom = byId('virtual-classroom');
+    const frame = byId('virtual-classroom-frame');
+    const classroomTitle = byId('virtual-classroom-title');
+    const classroomMessage = byId('virtual-classroom-message');
+    classroom.classList.remove('hidden');
+    classroomMessage.classList.remove('form-error');
+    frame.replaceChildren();
+    classroomTitle.textContent = 'Virtual classroom';
+    classroomMessage.textContent = 'Preparing your secure instructor access…';
+    classroom.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    try {
+      const access = await api(`/api/admin/classes/${encodeURIComponent(launchButton.dataset.classId)}/virtual-host-access`, { method: 'POST' });
+      await loadJaasApi(access.appId);
+      classroomTitle.textContent = access.title;
+      classroomMessage.textContent = 'You are joining as the class instructor.';
+      new window.JitsiMeetExternalAPI('8x8.vc', { roomName: `${access.appId}/${access.roomName}`, jwt: access.jwt, parentNode: frame, width: '100%', height: 720 });
+    } catch (cause) {
+      classroomMessage.textContent = cause.message;
+      classroomMessage.classList.add('form-error');
+    }
+    return;
+  }
   const copyButton = event.target.closest('.copy-private-link');
   if (copyButton) {
     try {
@@ -199,6 +242,11 @@ byId('admin-class-list').addEventListener('click', async (event) => {
     message('A new private registration link has been created.');
     await loadDashboard();
   } catch (cause) { message(cause.message, true); }
+});
+
+byId('close-virtual-classroom').addEventListener('click', () => {
+  byId('virtual-classroom-frame').replaceChildren();
+  byId('virtual-classroom').classList.add('hidden');
 });
 
 byId('registrant-table').addEventListener('change', async (event) => {

@@ -1,0 +1,14 @@
+.join-page { min-height: 100vh; background: var(--sky); }
+.join-main { max-width: 1280px; margin: 0 auto; padding: 12px 5% 56px; }
+.join-card { min-height: 520px; padding: clamp(24px, 5vw, 48px); border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: 0 12px 28px rgba(16, 43, 91, .1); }
+.join-card h1 { margin-bottom: 14px; font-size: clamp(2rem, 4vw, 3.3rem); }
+.join-card > p:not(.eyebrow) { max-width: 650px; color: #527197; }
+.join-loader { width: 36px; height: 36px; margin: 24px 0; border: 4px solid #d8e5fc; border-top-color: var(--blue); border-radius: 50%; animation: join-spin .85s linear infinite; }
+.join-card.ready { padding: 18px; }
+.join-card.ready > .eyebrow, .join-card.ready > h1, .join-card.ready > p, .join-card.ready > .join-loader { display: none; }
+.jaas-meeting { min-height: 660px; }
+.jaas-meeting iframe { display: block; border: 0; border-radius: 10px; }
+.join-card.join-error { max-width: 700px; min-height: 0; margin: 8vh auto 0; text-align: center; }
+.join-card.join-error .join-loader { display: none; }
+@keyframes join-spin { to { transform: rotate(360deg); } }
+@media (max-width: 780px) { .join-main { padding: 0 16px 30px; } .join-card { padding: 24px 18px; } .jaas-meeting { min-height: 560px; } }

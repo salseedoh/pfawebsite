@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS classes (
   duration_minutes INTEGER,
   location TEXT NOT NULL,
   virtual_join_url TEXT,
+  is_virtual INTEGER NOT NULL DEFAULT 0 CHECK (is_virtual IN (0, 1)),
+  virtual_room_name TEXT UNIQUE,
   class_price_cents INTEGER NOT NULL DEFAULT 12500,
   class_with_kit_price_cents INTEGER NOT NULL DEFAULT 15000,
   max_students INTEGER NOT NULL DEFAULT 10,
@@ -39,7 +41,9 @@ CREATE TABLE IF NOT EXISTS registrations (
   admin_notification_attempts INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   paid_at TEXT,
-  notes TEXT
+  notes TEXT,
+  virtual_join_token_hash TEXT UNIQUE,
+  virtual_join_token_issued_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS registrations_class_id_idx ON registrations(class_id);

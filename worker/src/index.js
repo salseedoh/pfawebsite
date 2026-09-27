@@ -19,6 +19,8 @@ const privateAccessToken = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 };
+const base64Url = (value) => btoa(String.fromCharCode(...new Uint8Array(value))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+const base64UrlText = (value) => base64Url(new TextEncoder().encode(value));
 const asBoolean = (value) => value === true || value === 1 || value === '1';
 const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 const KIT_SUBTOTAL_CENTS = 4000;
@@ -56,7 +58,116 @@ function publicClass(row) {
   const course = mapClass(row);
   delete course.private_access_token;
   delete course.virtual_join_url;
+  delete course.virtual_room_name;
   return course;
+}
+
+async function sha256(value) {
+  return base64Url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+}
+
+function derLength(length) {
+  if (length < 128) return Uint8Array.of(length);
+  const bytes = [];
+  for (let value = length; value > 0; value >>= 8) bytes.unshift(value & 0xff);
+  return Uint8Array.of(0x80 | bytes.length, ...bytes);
+}
+
+function pkcs1ToPkcs8(pkcs1) {
+  const algorithmIdentifier = Uint8Array.of(0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00);
+  const privateKey = Uint8Array.of(0x04, ...derLength(pkcs1.length), ...pkcs1);
+  const contents = Uint8Array.of(0x02, 0x01, 0x00, ...algorithmIdentifier, ...privateKey);
+  return Uint8Array.of(0x30, ...derLength(contents.length), ...contents).buffer;
+}
+
+function pemToArrayBuffer(pem) {
+  const source = clean(pem);
+  const isPkcs1 = source.includes('-----BEGIN RSA PRIVATE KEY-----');
+  const isPkcs8 = source.includes('-----BEGIN PRIVATE KEY-----');
+  const encoded = source.replace(/-----BEGIN (?:RSA )?PRIVATE KEY-----|-----END (?:RSA )?PRIVATE KEY-----|\s/g, '');
+  if (!encoded || !isPkcs1 && !isPkcs8) throw new Error('The JaaS private key must be a PEM private key.');
+  const binary = atob(encoded);
+  const key = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return isPkcs1 ? pkcs1ToPkcs8(key) : key.buffer;
+}
+
+async function jaasSigningKey(env) {
+  if (!env.JAAS_PRIVATE_KEY || !env.JAAS_APP_ID || !env.JAAS_KEY_ID) throw new Error('JaaS has not been configured.');
+  return crypto.subtle.importKey('pkcs8', pemToArrayBuffer(env.JAAS_PRIVATE_KEY), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+}
+
+async function jaasJwt(env, { roomName, user, moderator, expiresAt }) {
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAtSeconds = Math.floor(expiresAt / 1000);
+  if (!Number.isFinite(expiresAtSeconds) || expiresAtSeconds <= now) throw new Error('This virtual classroom has expired.');
+  const header = { alg: 'RS256', kid: env.JAAS_KEY_ID, typ: 'JWT' };
+  const payload = {
+    aud: 'jitsi',
+    iss: 'chat',
+    sub: env.JAAS_APP_ID,
+    room: roomName,
+    nbf: now - 30,
+    exp: expiresAtSeconds,
+    context: {
+      user: { id: user.id, name: user.name, email: user.email, moderator },
+      features: { livestreaming: false, recording: false, transcription: false, 'sip-inbound-call': false, 'sip-outbound-call': false, 'inbound-call': false, 'outbound-call': false, 'file-upload': false },
+      room: { regex: false },
+    },
+  };
+  const signingInput = `${base64UrlText(JSON.stringify(header))}.${base64UrlText(JSON.stringify(payload))}`;
+  const signature = await crypto.subtle.sign({ name: 'RSASSA-PKCS1-v1_5' }, await jaasSigningKey(env), new TextEncoder().encode(signingInput));
+  return { token: `${signingInput}.${base64Url(signature)}`, expiresAt: new Date(expiresAt).toISOString() };
+}
+
+function virtualJoinExpiresAt(course) {
+  const startsAt = Date.parse(course.starts_at);
+  const duration = Number(course.duration_minutes);
+  if (!Number.isFinite(startsAt) || !Number.isFinite(duration) || duration <= 0) return null;
+  return startsAt + ((duration + 60) * 60 * 1000);
+}
+
+function virtualJoinPageUrl(env, token) {
+  const siteUrl = (env.PUBLIC_SITE_URL || 'https://preparedpaws.com').replace(/\/$/, '');
+  const testMode = env.TEST_MODE === 'true' ? '?environment=test' : '';
+  return `${siteUrl}/join-class.html${testMode}#${token}`;
+}
+
+async function issueVirtualJoinToken(registrationId, env) {
+  const token = privateAccessToken();
+  await env.DB.prepare('UPDATE registrations SET virtual_join_token_hash = ?, virtual_join_token_issued_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .bind(await sha256(token), registrationId).run();
+  return token;
+}
+
+async function virtualJoinAccess(request, env) {
+  const body = await request.json();
+  const token = clean(body.token);
+  if (!token || token.length < 32) return error('This virtual class link is unavailable.', 404);
+  if (!await withinRateLimit(request, env, 'virtual-join', 20, 15)) return error('Please wait a few minutes before trying again.', 429);
+  const registration = await env.DB.prepare(`SELECT r.id, r.email, r.first_name, r.last_name, r.payment_status, c.starts_at, c.duration_minutes, c.status AS class_status, c.is_virtual, c.virtual_room_name
+    FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.virtual_join_token_hash = ?`).bind(await sha256(token)).first();
+  const expiresAt = registration ? virtualJoinExpiresAt(registration) : null;
+  if (!registration || registration.payment_status !== 'paid' || registration.class_status === 'cancelled' || !registration.is_virtual || !registration.virtual_room_name || !expiresAt || Date.now() > expiresAt) return error('This virtual class link is unavailable.', 404);
+  const pass = await jaasJwt(env, {
+    roomName: registration.virtual_room_name,
+    user: { id: registration.id, name: `${registration.first_name} ${registration.last_name}`, email: registration.email },
+    moderator: false,
+    expiresAt,
+  });
+  return json({ appId: env.JAAS_APP_ID, roomName: registration.virtual_room_name, jwt: pass.token, jwtExpiresAt: pass.expiresAt, joinLinkExpiresAt: new Date(expiresAt).toISOString() });
+}
+
+async function virtualHostAccess(env, classId) {
+  const course = await env.DB.prepare('SELECT id, title, starts_at, duration_minutes, status, is_virtual, virtual_room_name FROM classes WHERE id = ?').bind(classId).first();
+  const expiresAt = course ? virtualJoinExpiresAt(course) : null;
+  if (!course || course.status === 'cancelled' || !course.is_virtual || !course.virtual_room_name || !expiresAt || Date.now() > expiresAt) return error('This virtual classroom is unavailable.', 404);
+  const pass = await jaasJwt(env, {
+    roomName: course.virtual_room_name,
+    user: { id: `prepared-paws-host-${course.id}`, name: 'Prepared Paws Instructor', email: '' },
+    moderator: true,
+    expiresAt,
+  });
+  return json({ appId: env.JAAS_APP_ID, roomName: course.virtual_room_name, jwt: pass.token, jwtExpiresAt: pass.expiresAt, title: course.title });
 }
 
 async function listClasses(env, includeAll = false) {
@@ -283,11 +394,15 @@ async function stripeWebhook(request, env) {
 
 async function sendConfirmationEmail(orderType, orderId, table, env) {
   const order = orderType === 'class_registration'
-    ? await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.duration_minutes AS class_duration_minutes, c.location AS class_location, c.virtual_join_url FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first()
+    ? await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.duration_minutes AS class_duration_minutes, c.location AS class_location, c.virtual_join_url, c.is_virtual, c.virtual_room_name FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first()
     : await env.DB.prepare('SELECT * FROM kit_orders WHERE id = ?').bind(orderId).first();
   if (!order || order.confirmation_email_status === 'sent') return;
 
   try {
+    if (orderType === 'class_registration' && order.is_virtual) {
+      const token = await issueVirtualJoinToken(order.id, env);
+      order.virtual_join_page_url = virtualJoinPageUrl(env, token);
+    }
     const template = confirmationEmail(orderType, order);
     const result = await sendZeptoMail({
       from: { address: 'admin@preparedpaws.com', name: 'Prepared Paws' },
@@ -362,10 +477,11 @@ async function adminLogin(request, env) {
 async function createClass(request, env) {
   const body = await request.json();
   const visibility = clean(body.visibility || 'public');
-  const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), durationMinutes: Number(body.durationMinutes), location: clean(body.location), virtualJoinUrl: clean(body.virtualJoinUrl), classPrice: Number(body.classPrice || 125) * 100, classWithKitPrice: Number(body.classWithKitPrice || 150) * 100, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open'), visibility, privateAccessToken: visibility === 'private' ? privateAccessToken() : null };
-  if (!course.title || !course.startsAt || !Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0 || !course.location || (course.virtualJoinUrl && !/^https:\/\//i.test(course.virtualJoinUrl)) || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments, and use a full https:// Zoom link when applicable. Class size must be between 6 and 10 students.');
-  await env.DB.prepare('INSERT INTO classes (id, title, starts_at, duration_minutes, location, virtual_join_url, class_price_cents, class_with_kit_price_cents, max_students, status, visibility, private_access_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(course.id, course.title, course.startsAt, course.durationMinutes, course.location, course.virtualJoinUrl || null, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, course.visibility, course.privateAccessToken).run();
+  const isVirtual = asBoolean(body.isVirtual);
+  const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), durationMinutes: Number(body.durationMinutes), location: clean(body.location), virtualJoinUrl: clean(body.virtualJoinUrl), isVirtual, virtualRoomName: isVirtual ? `prepared-paws-${id()}` : null, classPrice: Number(body.classPrice || 125) * 100, classWithKitPrice: Number(body.classWithKitPrice || 150) * 100, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open'), visibility, privateAccessToken: visibility === 'private' ? privateAccessToken() : null };
+  if (!course.title || !course.startsAt || !Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0 || !course.location || (course.virtualJoinUrl && !/^https:\/\//i.test(course.virtualJoinUrl)) || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
+  await env.DB.prepare('INSERT INTO classes (id, title, starts_at, duration_minutes, location, virtual_join_url, is_virtual, virtual_room_name, class_price_cents, class_with_kit_price_cents, max_students, status, visibility, private_access_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(course.id, course.title, course.startsAt, course.durationMinutes, course.location, course.virtualJoinUrl || null, course.isVirtual ? 1 : 0, course.virtualRoomName, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, course.visibility, course.privateAccessToken).run();
   return json({ id: course.id, privateAccessToken: course.privateAccessToken }, 201);
 }
 
@@ -379,6 +495,8 @@ async function updateClass(request, env, classId) {
     durationMinutes: body.durationMinutes === undefined ? existing.duration_minutes : Number(body.durationMinutes),
     location: clean(body.location ?? existing.location),
     virtualJoinUrl: clean(body.virtualJoinUrl ?? existing.virtual_join_url),
+    isVirtual: body.isVirtual === undefined ? asBoolean(existing.is_virtual) : asBoolean(body.isVirtual),
+    virtualRoomName: body.isVirtual === undefined ? existing.virtual_room_name : (asBoolean(body.isVirtual) ? (existing.virtual_room_name || `prepared-paws-${existing.id}`) : null),
     classPrice: Math.round(Number(body.classPrice ?? existing.class_price_cents / 100) * 100),
     classWithKitPrice: Math.round(Number(body.classWithKitPrice ?? existing.class_with_kit_price_cents / 100) * 100),
     maxStudents: Number(body.maxStudents ?? existing.max_students),
@@ -386,9 +504,9 @@ async function updateClass(request, env, classId) {
     visibility: clean(body.visibility ?? existing.visibility ?? 'public'),
     privateAccessToken: asBoolean(body.regeneratePrivateLink) && (body.visibility ?? existing.visibility) === 'private' ? privateAccessToken() : existing.private_access_token
   };
-  if (!course.title || !course.startsAt || (course.durationMinutes !== null && (!Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0)) || !course.location || (course.virtualJoinUrl && !/^https:\/\//i.test(course.virtualJoinUrl)) || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status) || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments, and use a full https:// Zoom link when applicable. Class size must be between 6 and 10 students.');
-  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, duration_minutes = ?, location = ?, virtual_join_url = ?, class_price_cents = ?, class_with_kit_price_cents = ?, max_students = ?, status = ?, visibility = ?, private_access_token = ? WHERE id = ?')
-    .bind(course.title, course.startsAt, course.durationMinutes, course.location, course.virtualJoinUrl || null, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, course.visibility, course.visibility === 'private' ? course.privateAccessToken : null, classId).run();
+  if (!course.title || !course.startsAt || (course.durationMinutes !== null && (!Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0)) || !course.location || (course.virtualJoinUrl && !/^https:\/\//i.test(course.virtualJoinUrl)) || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status) || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
+  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, duration_minutes = ?, location = ?, virtual_join_url = ?, is_virtual = ?, virtual_room_name = ?, class_price_cents = ?, class_with_kit_price_cents = ?, max_students = ?, status = ?, visibility = ?, private_access_token = ? WHERE id = ?')
+    .bind(course.title, course.startsAt, course.durationMinutes, course.location, course.virtualJoinUrl || null, course.isVirtual ? 1 : 0, course.virtualRoomName, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, course.visibility, course.visibility === 'private' ? course.privateAccessToken : null, classId).run();
   return json({ ok: true, privateAccessToken: course.visibility === 'private' ? course.privateAccessToken : null });
 }
 
@@ -448,11 +566,13 @@ export default {
       if (request.method === 'POST' && url.pathname === '/api/registrations') { const response = await createRegistration(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/kit-orders') { const response = await createKitOrder(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/payment-retry') { const response = await retryCheckout(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
+      if (request.method === 'POST' && url.pathname === '/api/virtual-join') { const response = await virtualJoinAccess(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/admin/login') { const response = await adminLogin(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (!await authenticate(request, env)) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
       if (request.method === 'GET' && url.pathname === '/api/admin/classes') return json(await listClasses(env, true), 200, corsHeaders);
       if (request.method === 'POST' && url.pathname === '/api/admin/classes') { const response = await createClass(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/classes/')) { const response = await updateClass(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
+      if (request.method === 'POST' && /^\/api\/admin\/classes\/[^/]+\/virtual-host-access$/.test(url.pathname)) { const classId = decodeURIComponent(url.pathname.split('/')[4]); const response = await virtualHostAccess(env, classId); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'GET' && url.pathname === '/api/admin/registrations') return json(await registrations(env, url.searchParams.get('classId')), 200, corsHeaders);
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/registrations/')) { const response = await updateRegistration(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'GET' && url.pathname === '/api/admin/kit-orders') return json(await kitOrders(env), 200, corsHeaders);

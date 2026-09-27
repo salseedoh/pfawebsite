@@ -49,15 +49,16 @@ function emailShell({ preview, body, textBody }) {
 function classEmail(registration) {
   const firstName = escapeHtml(registration.first_name);
   const details = textClassDetails(registration);
-  const isVirtual = Boolean(registration.virtual_join_url);
+  const isVirtual = Boolean(registration.is_virtual || registration.virtual_join_url);
+  const joinUrl = registration.virtual_join_page_url || registration.virtual_join_url;
   const joinLink = isVirtual
-    ? `<p style="margin:0 0 22px;"><a href="${escapeHtml(registration.virtual_join_url)}" style="display:inline-block;background:#3678d7;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 18px;border-radius:6px;">Join Zoom class</a></p>`
+    ? `<p style="margin:0 0 22px;"><a href="${escapeHtml(joinUrl)}" style="display:inline-block;background:#3678d7;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 18px;border-radius:6px;">Join your virtual class</a></p>`
     : '';
   const preparation = isVirtual
     ? `<p><strong>Please have these items ready for class:</strong></p>
-      <ul style="padding-left:22px;margin-top:0;"><li>One bath-sized towel</li><li>A 6-foot leash or similar, soft non-abrasive strap</li></ul>
+      <ul style="padding-left:22px;margin-top:0;"><li>One bath-sized towel</li><li>A 6-foot leash or similar, soft non-abrasive strap</li><li>A stuffed animal, preferably one that can be positioned lying down, for the class demonstrations</li></ul>
       <p>Please do not use a retractable leash; it does not work well with the demonstrations.</p>
-      <p><strong>Please keep live pets safely at home.</strong> We provide demo dogs for hands-on practice.</p>`
+      <p>Please do not use a live pet for the class demonstrations.</p>`
     : `<p><strong>Please bring:</strong></p>
       <ul style="padding-left:22px;margin-top:0;"><li>One bath-sized towel</li><li>A 6-foot leash or similar, soft non-abrasive strap</li></ul>
       <p>Please do not bring a retractable leash; it does not work well with the demonstrations.</p>
@@ -84,12 +85,12 @@ function classEmail(registration) {
     <p>Watch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.</p>
     <p style="margin-bottom:0;">Questions about your class? Reply to this email and our class team will be happy to help.</p>`;
   const preparationText = isVirtual
-    ? 'Please have these items ready for class:\n- One bath-sized towel\n- A 6-foot leash or similar, soft non-abrasive strap\n\nPlease do not use a retractable leash; it does not work well with the demonstrations.\n\nPlease keep live pets safely at home. We provide demo dogs for hands-on practice.'
+    ? 'Please have these items ready for class:\n- One bath-sized towel\n- A 6-foot leash or similar, soft non-abrasive strap\n- A stuffed animal, preferably one that can be positioned lying down, for the class demonstrations\n\nPlease do not use a retractable leash; it does not work well with the demonstrations.\n\nPlease do not use a live pet for the class demonstrations.'
     : 'Please bring:\n- One bath-sized towel\n- A 6-foot leash or similar, soft non-abrasive strap\n\nPlease do not bring a retractable leash; it does not work well with the demonstrations.\n\nPlease leave live pets at home. We provide demo dogs for hands-on practice. These demo dogs stay with Prepared Paws after class.';
   const kitText = registration.kit_selected
     ? (isVirtual ? '\n\nYour Prepared Paws first aid kit is included. We will contact you separately to arrange how you receive it.' : '\n\nYour Prepared Paws first aid kit will be provided when you arrive for class. There is no separate pickup needed.')
     : '';
-  const textBody = `Hi ${registration.first_name},\n\nThank you for registering with Prepared Paws. Your payment was received and your place is confirmed.\n\n${details}${isVirtual ? `\n\nJoin Zoom class: ${registration.virtual_join_url}` : ''}\n\n${preparationText}${kitText}\n\nWatch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.\n\nQuestions about your class? Reply to this email and our class team will be happy to help.\n\nPrepared Paws\n${WEBSITE_URL}`;
+  const textBody = `Hi ${registration.first_name},\n\nThank you for registering with Prepared Paws. Your payment was received and your place is confirmed.\n\n${details}${isVirtual ? `\n\nJoin your virtual class: ${joinUrl}` : ''}\n\n${preparationText}${kitText}\n\nWatch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.\n\nQuestions about your class? Reply to this email and our class team will be happy to help.\n\nPrepared Paws\n${WEBSITE_URL}`;
   return { subject, ...emailShell({ preview: 'Your Prepared Paws class registration is confirmed.', body, textBody }), replyTo: 'classes@preparedpaws.com' };
 }
 

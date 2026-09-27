@@ -4,7 +4,9 @@
   "compatibility_date": "2026-09-13",
   "vars": {
     "ADMIN_TURNSTILE_SITE_KEY": "0x4AAAAAAFBgL6w6OcvzCoBw",
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAE9QzksNExiIZJop"
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAE9QzksNExiIZJop",
+    "JAAS_APP_ID": "vpaas-magic-cookie-02c357287a16424c934a7e76752340f5",
+    "JAAS_KEY_ID": "vpaas-magic-cookie-02c357287a16424c934a7e76752340f5/04820e"
   },
   "observability": {
     "logs": {

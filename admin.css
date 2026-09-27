@@ -17,6 +17,9 @@
 .private-class-tools { display: grid; gap: 8px; }
 .private-class-tools .button { justify-self: start; }
 .private-badge { display: inline-block; padding: 3px 8px; border-radius: 99px; background: #edf3ff; color: #2456ab; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.virtual-badge { display: inline-block; padding: 3px 8px; border-radius: 99px; background: #e3f3ea; color: #247244; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.virtual-classroom-frame { min-height: 520px; margin-top: 18px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #102b5b; }
+.virtual-classroom-frame iframe { display: block; border: 0; }
 .empty-state, .empty-cell { color: #527197; padding: 15px 0; }
 .muted { color: #5A7296; font-size: .82rem; }
 .form-error { color: #AD2E43; font-weight: 600; }
