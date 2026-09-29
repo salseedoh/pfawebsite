@@ -276,15 +276,20 @@ async function registrationCheckout(registration, course, env) {
 }
 
 async function kitCheckout(order, env) {
-  return startCheckout(checkoutFields({
+  const fields = checkoutFields({
     orderId: order.id,
     email: order.email,
-    amount: order.amount_cents,
+    amount: KIT_SUBTOTAL_CENTS,
     name: 'Prepared Paws first aid kit',
     description: 'Local pickup only. We will contact you after payment with pickup details.',
     orderType: 'kit_order',
     env,
-  }), 'kit_orders', order.id, env);
+  });
+  fields['line_items[1][price_data][currency]'] = 'usd';
+  fields['line_items[1][price_data][product_data][name]'] = 'Sales tax (8.25%)';
+  fields['line_items[1][price_data][unit_amount]'] = String(KIT_TAX_CENTS);
+  fields['line_items[1][quantity]'] = '1';
+  return startCheckout(fields, 'kit_orders', order.id, env);
 }
 
 async function createRegistration(request, env) {
