@@ -158,9 +158,9 @@ async function virtualJoinAccess(request, env) {
 }
 
 async function virtualHostAccess(env, classId) {
-  const course = await env.DB.prepare('SELECT id, title, starts_at, duration_minutes, status, is_virtual, virtual_room_name FROM classes WHERE id = ?').bind(classId).first();
+  const course = await env.DB.prepare('SELECT id, title, starts_at, duration_minutes, status, is_virtual, virtual_room_name, admin_archived_at FROM classes WHERE id = ?').bind(classId).first();
   const expiresAt = course ? virtualJoinExpiresAt(course) : null;
-  if (!course || course.status === 'cancelled' || !course.is_virtual || !course.virtual_room_name || !expiresAt || Date.now() > expiresAt) return error('This virtual classroom is unavailable.', 404);
+  if (!course || course.admin_archived_at || course.status === 'cancelled' || !course.is_virtual || !course.virtual_room_name || !expiresAt || Date.now() > expiresAt) return error('This virtual classroom is unavailable.', 404);
   const pass = await jaasJwt(env, {
     roomName: course.virtual_room_name,
     user: { id: `prepared-paws-host-${course.id}`, name: 'Prepared Paws Instructor', email: '' },
@@ -170,16 +170,18 @@ async function virtualHostAccess(env, classId) {
   return json({ appId: env.JAAS_APP_ID, roomName: course.virtual_room_name, jwt: pass.token, jwtExpiresAt: pass.expiresAt, title: course.title });
 }
 
-async function listClasses(env, includeAll = false) {
-  const query = includeAll
-    ? 'SELECT * FROM classes ORDER BY starts_at ASC'
-    : "SELECT * FROM classes WHERE status = 'open' AND visibility = 'public' AND starts_at >= datetime('now', '-1 day') ORDER BY starts_at ASC";
+async function listClasses(env, { admin = false, history = false } = {}) {
+  const query = admin
+    ? (history
+      ? "SELECT c.*, (SELECT COUNT(*) FROM registrations r WHERE r.class_id = c.id) AS registration_count, (SELECT COUNT(*) FROM registrations r WHERE r.class_id = c.id AND r.payment_status = 'paid') AS paid_registration_count FROM classes c WHERE c.admin_archived_at IS NOT NULL OR c.status = 'cancelled' OR c.starts_at < datetime('now') ORDER BY c.starts_at DESC"
+      : "SELECT c.*, (SELECT COUNT(*) FROM registrations r WHERE r.class_id = c.id) AS registration_count, (SELECT COUNT(*) FROM registrations r WHERE r.class_id = c.id AND r.payment_status = 'paid') AS paid_registration_count FROM classes c WHERE c.admin_archived_at IS NULL AND c.status != 'cancelled' AND c.starts_at >= datetime('now') ORDER BY c.starts_at ASC")
+    : "SELECT * FROM classes WHERE admin_archived_at IS NULL AND status = 'open' AND visibility = 'public' AND starts_at >= datetime('now', '-1 day') ORDER BY starts_at ASC";
   const { results } = await env.DB.prepare(query).all();
-  return results.map(includeAll ? mapClass : publicClass);
+  return results.map(admin ? mapClass : publicClass);
 }
 
 async function privateClass(env, accessToken) {
-  const course = await env.DB.prepare("SELECT * FROM classes WHERE visibility = 'private' AND private_access_token = ? AND status = 'open' AND starts_at >= datetime('now', '-1 day')")
+  const course = await env.DB.prepare("SELECT * FROM classes WHERE visibility = 'private' AND private_access_token = ? AND admin_archived_at IS NULL AND status = 'open' AND starts_at >= datetime('now', '-1 day')")
     .bind(accessToken).first();
   return course ? publicClass(course) : null;
 }
@@ -304,7 +306,7 @@ async function createRegistration(request, env) {
   if (!classId || !/^\S+@\S+\.\S+$/.test(email) || !firstName || !lastName) return error('Please provide an email, first name, and last name.');
   if (!await verifyTurnstile(clean(body.turnstileToken), request, env)) return error('Please complete the security check and try again.', 403);
   if (!await withinRateLimit(request, env, 'registration', 5, 30)) return error('Please wait a few minutes before trying again.', 429);
-  const course = await env.DB.prepare("SELECT * FROM classes WHERE id = ? AND status = 'open'").bind(classId).first();
+  const course = await env.DB.prepare("SELECT * FROM classes WHERE id = ? AND admin_archived_at IS NULL AND status = 'open'").bind(classId).first();
   if (!course) return error('This class is no longer open for registration.', 404);
   if (course.visibility === 'private' && (!accessToken || accessToken !== course.private_access_token)) return error('This private class link is no longer active.', 404);
   const existing = await env.DB.prepare(`SELECT id FROM registrations WHERE class_id = ? AND email = ? AND ${activeCheckoutSql} LIMIT 1`).bind(classId, email).first();
@@ -494,6 +496,11 @@ async function updateClass(request, env, classId) {
   const body = await request.json();
   const existing = await env.DB.prepare('SELECT * FROM classes WHERE id = ?').bind(classId).first();
   if (!existing) return error('Class not found.', 404);
+  if (body.archived !== undefined) {
+    await env.DB.prepare('UPDATE classes SET admin_archived_at = ? WHERE id = ?')
+      .bind(asBoolean(body.archived) ? new Date().toISOString() : null, classId).run();
+    return json({ ok: true });
+  }
   const course = {
     title: clean(body.title ?? existing.title),
     startsAt: clean(body.startsAt ?? existing.starts_at),
@@ -517,30 +524,66 @@ async function updateClass(request, env, classId) {
 
 async function updateRegistration(request, env, registrationId) {
   const body = await request.json();
+  if (body.archived !== undefined) {
+    await env.DB.prepare('UPDATE registrations SET admin_archived_at = ? WHERE id = ?')
+      .bind(asBoolean(body.archived) ? new Date().toISOString() : null, registrationId).run();
+    return json({ ok: true });
+  }
+  if (body.restoreProtrainingsExport === true) {
+    await env.DB.prepare('UPDATE registrations SET protrainings_exported_at = NULL WHERE id = ?').bind(registrationId).run();
+    return json({ ok: true });
+  }
+  if (body.markProtrainingsExported === true) {
+    const result = await env.DB.prepare("UPDATE registrations SET protrainings_exported_at = ? WHERE id = ? AND payment_status = 'paid'")
+      .bind(new Date().toISOString(), registrationId).run();
+    if (!result.meta.changes) return error('Only paid registrations can be marked as exported.', 400);
+    return json({ ok: true });
+  }
   const status = clean(body.paymentStatus);
   if (!['awaiting_payment', 'paid', 'refunded', 'cancelled'].includes(status)) return error('Invalid payment status.');
   await env.DB.prepare("UPDATE registrations SET payment_status = ?, paid_at = CASE WHEN ? = 'paid' THEN CURRENT_TIMESTAMP ELSE paid_at END WHERE id = ?").bind(status, status, registrationId).run();
   return json({ ok: true });
 }
 
-async function kitOrders(env) {
-  const { results } = await env.DB.prepare('SELECT * FROM kit_orders ORDER BY created_at DESC').all();
+async function kitOrders(env, history = false) {
+  const { results } = await env.DB.prepare(history
+    ? 'SELECT * FROM kit_orders WHERE admin_archived_at IS NOT NULL ORDER BY created_at DESC'
+    : 'SELECT * FROM kit_orders WHERE admin_archived_at IS NULL ORDER BY created_at DESC').all();
   return results;
 }
 
 async function updateKitOrder(request, env, orderId) {
   const body = await request.json();
+  if (body.archived !== undefined) {
+    await env.DB.prepare('UPDATE kit_orders SET admin_archived_at = ? WHERE id = ?')
+      .bind(asBoolean(body.archived) ? new Date().toISOString() : null, orderId).run();
+    return json({ ok: true });
+  }
   const status = clean(body.paymentStatus);
   if (!['awaiting_payment', 'paid', 'refunded', 'cancelled'].includes(status)) return error('Invalid payment status.');
   await env.DB.prepare("UPDATE kit_orders SET payment_status = ?, paid_at = CASE WHEN ? = 'paid' THEN CURRENT_TIMESTAMP ELSE paid_at END WHERE id = ?").bind(status, status, orderId).run();
   return json({ ok: true });
 }
 
-async function registrations(env, classId) {
-  const sql = `SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at FROM registrations r JOIN classes c ON c.id = r.class_id ${classId ? 'WHERE r.class_id = ?' : ''} ORDER BY c.starts_at ASC, r.created_at ASC`;
+async function registrations(env, { classId = null, history = false } = {}) {
+  const filters = [];
+  if (classId) filters.push('r.class_id = ?');
+  if (history) filters.push('(r.admin_archived_at IS NOT NULL OR r.protrainings_exported_at IS NOT NULL)');
+  else filters.push('r.admin_archived_at IS NULL', 'r.protrainings_exported_at IS NULL');
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const sql = `SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at FROM registrations r JOIN classes c ON c.id = r.class_id ${where} ORDER BY c.starts_at ASC, r.created_at ASC`;
   const statement = env.DB.prepare(sql);
   const { results } = classId ? await statement.bind(classId).all() : await statement.all();
   return results;
+}
+
+async function exportProtrainingsCsv(env) {
+  const rows = await registrations(env);
+  const paidRows = rows.filter((row) => row.payment_status === 'paid');
+  if (!paidRows.length) return error('There are no paid students ready to export.', 409);
+  const exportedAt = new Date().toISOString();
+  await env.DB.batch(paidRows.map((row) => env.DB.prepare('UPDATE registrations SET protrainings_exported_at = ? WHERE id = ? AND protrainings_exported_at IS NULL').bind(exportedAt, row.id)));
+  return new Response(csv(paidRows), { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="protrainings-registrations.csv"' } });
 }
 
 function csv(rows) {
@@ -574,15 +617,15 @@ export default {
       if (request.method === 'POST' && url.pathname === '/api/virtual-join') { const response = await virtualJoinAccess(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && url.pathname === '/api/admin/login') { const response = await adminLogin(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (!await authenticate(request, env)) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...JSON_HEADERS, ...corsHeaders } });
-      if (request.method === 'GET' && url.pathname === '/api/admin/classes') return json(await listClasses(env, true), 200, corsHeaders);
+      if (request.method === 'GET' && url.pathname === '/api/admin/classes') return json(await listClasses(env, { admin: true, history: url.searchParams.get('history') === '1' }), 200, corsHeaders);
       if (request.method === 'POST' && url.pathname === '/api/admin/classes') { const response = await createClass(request, env); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/classes/')) { const response = await updateClass(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
       if (request.method === 'POST' && /^\/api\/admin\/classes\/[^/]+\/virtual-host-access$/.test(url.pathname)) { const classId = decodeURIComponent(url.pathname.split('/')[4]); const response = await virtualHostAccess(env, classId); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
-      if (request.method === 'GET' && url.pathname === '/api/admin/registrations') return json(await registrations(env, url.searchParams.get('classId')), 200, corsHeaders);
+      if (request.method === 'GET' && url.pathname === '/api/admin/registrations') return json(await registrations(env, { classId: url.searchParams.get('classId'), history: url.searchParams.get('history') === '1' }), 200, corsHeaders);
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/registrations/')) { const response = await updateRegistration(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
-      if (request.method === 'GET' && url.pathname === '/api/admin/kit-orders') return json(await kitOrders(env), 200, corsHeaders);
+      if (request.method === 'GET' && url.pathname === '/api/admin/kit-orders') return json(await kitOrders(env, url.searchParams.get('history') === '1'), 200, corsHeaders);
       if (request.method === 'PATCH' && url.pathname.startsWith('/api/admin/kit-orders/')) { const response = await updateKitOrder(request, env, url.pathname.split('/').pop()); return new Response(response.body, { status: response.status, headers: { ...JSON_HEADERS, ...corsHeaders } }); }
-      if (request.method === 'GET' && url.pathname === '/api/admin/export.csv') { const rows = (await registrations(env)).filter((row) => row.payment_status === 'paid'); return new Response(csv(rows), { headers: { ...corsHeaders, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="protrainings-registrations.csv"' } }); }
+      if (request.method === 'POST' && url.pathname === '/api/admin/export.csv') { const response = await exportProtrainingsCsv(env); return new Response(response.body, { status: response.status, headers: { ...corsHeaders, ...Object.fromEntries(response.headers) } }); }
       return new Response('Prepared Paws API', { status: 200, headers: corsHeaders });
     } catch (cause) {
       console.error('Worker request failed.', cause);

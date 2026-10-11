@@ -9,6 +9,9 @@ let registrations = [];
 let kitOrders = [];
 let jaasApiPromise;
 let editingClassId = null;
+let showClassHistory = false;
+let showRegistrationHistory = false;
+let showKitOrderHistory = false;
 
 const byId = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
@@ -129,27 +132,39 @@ function message(text = '', isError = false) {
 
 function renderClasses() {
   const target = byId('admin-class-list');
+  byId('classes-heading').textContent = showClassHistory ? 'Class history' : 'Upcoming classes';
+  byId('classes-description').textContent = showClassHistory
+    ? 'Archived, cancelled, and past classes are kept here for reference.'
+    : 'Set a class to closed when registration should stop, or cancelled if it will not run.';
+  byId('toggle-class-history').textContent = showClassHistory ? 'Show upcoming classes' : 'Show class history';
   if (!classes.length) {
-    target.innerHTML = '<p class="empty-state">No classes yet. Use the form above to publish your first one.</p>';
+    target.innerHTML = `<p class="empty-state">${showClassHistory ? 'No class history yet.' : 'No upcoming classes. Use the form above to publish one.'}</p>`;
     return;
   }
   target.innerHTML = classes.map((course) => {
     const courseRegistrations = registrations.filter((registration) => registration.class_id === course.id);
-    const paid = courseRegistrations.filter((registration) => registration.payment_status === 'paid').length;
+    const paid = Number(course.paid_registration_count ?? courseRegistrations.filter((registration) => registration.payment_status === 'paid').length);
+    const registrationCount = Number(course.registration_count ?? courseRegistrations.length);
     const duration = formatDuration(course.duration_minutes);
     const isPrivate = course.visibility === 'private';
     const isVirtual = Boolean(course.is_virtual);
     return `<article class="admin-class-card">
-      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)} ${isPrivate ? '<span class="private-badge">Private</span>' : ''} ${isVirtual ? '<span class="virtual-badge">Virtual</span>' : ''}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${courseRegistrations.length} registrations</p></div>
-      <div class="class-admin-actions"><span>${money(course.class_price)} class &middot; ${money(course.class_with_kit_price)} with kit</span><button class="button button-small edit-class" type="button" data-class-id="${course.id}">Edit class</button>${isVirtual ? `<button class="button button-small launch-virtual-classroom" type="button" data-class-id="${course.id}">Launch virtual classroom</button>` : ''}${isPrivate ? `<div class="private-class-tools"><button class="button button-small copy-private-link" type="button" data-private-link="${escapeHtml(privateClassLink(course))}">Copy private link</button><button class="text-button regenerate-private-link" type="button" data-class-id="${course.id}">Generate new link</button></div>` : ''}<label>Status<select class="class-status" data-class-id="${course.id}"><option value="open" ${course.status === 'open' ? 'selected' : ''}>Open</option><option value="closed" ${course.status === 'closed' ? 'selected' : ''}>Closed</option><option value="cancelled" ${course.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label></div>
+      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)} ${isPrivate ? '<span class="private-badge">Private</span>' : ''} ${isVirtual ? '<span class="virtual-badge">Virtual</span>' : ''}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${registrationCount} registrations</p></div>
+      <div class="class-admin-actions"><span>${money(course.class_price)} class &middot; ${money(course.class_with_kit_price)} with kit</span><button class="button button-small edit-class" type="button" data-class-id="${course.id}">Edit class</button>${isVirtual && !showClassHistory ? `<button class="button button-small launch-virtual-classroom" type="button" data-class-id="${course.id}">Launch virtual classroom</button>` : ''}${isPrivate ? `<div class="private-class-tools"><button class="button button-small copy-private-link" type="button" data-private-link="${escapeHtml(privateClassLink(course))}">Copy private link</button><button class="text-button regenerate-private-link" type="button" data-class-id="${course.id}">Generate new link</button></div>` : ''}<button class="text-button archive-class" type="button" data-class-id="${course.id}" data-archived="${course.admin_archived_at ? 'true' : 'false'}">${course.admin_archived_at ? 'Restore class' : 'Archive class'}</button><label>Status<select class="class-status" data-class-id="${course.id}"><option value="open" ${course.status === 'open' ? 'selected' : ''}>Open</option><option value="closed" ${course.status === 'closed' ? 'selected' : ''}>Closed</option><option value="cancelled" ${course.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label></div>
     </article>`;
   }).join('');
 }
 
 function renderRegistrations() {
   const target = byId('registrant-table');
+  byId('registrations-heading').textContent = showRegistrationHistory ? 'Registration export history' : 'Student registrations';
+  byId('registrations-description').textContent = showRegistrationHistory
+    ? 'These records are retained for reference. You can restore a student to the next CSV if necessary.'
+    : 'Paid students are included in the ProTrainings CSV once, then moved to export history.';
+  byId('toggle-registration-history').textContent = showRegistrationHistory ? 'Show current registrations' : 'Show export history';
+  byId('download-csv').classList.toggle('hidden', showRegistrationHistory);
   if (!registrations.length) {
-    target.innerHTML = '<tr><td colspan="5" class="empty-cell">No registrations yet.</td></tr>';
+    target.innerHTML = `<tr><td colspan="6" class="empty-cell">${showRegistrationHistory ? 'No exported or archived registrations.' : 'No current registrations need action.'}</td></tr>`;
     return;
   }
   target.innerHTML = registrations.map((registration) => `<tr>
@@ -158,13 +173,19 @@ function renderRegistrations() {
     <td>${escapeHtml(registration.language)}</td>
     <td>${registration.kit_selected ? 'Class + kit' : 'Class only'}<br><strong>${money(registration.amount_cents / 100)}</strong></td>
     <td><select class="payment-status" data-registration-id="${registration.id}"><option value="awaiting_payment" ${registration.payment_status === 'awaiting_payment' ? 'selected' : ''}>Awaiting payment</option><option value="paid" ${registration.payment_status === 'paid' ? 'selected' : ''}>Paid</option><option value="refunded" ${registration.payment_status === 'refunded' ? 'selected' : ''}>Refunded</option><option value="cancelled" ${registration.payment_status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></td>
+    <td><div class="record-actions">${registration.protrainings_exported_at ? '<span class="muted">Exported to ProTrainings</span><button class="text-button restore-registration-export" type="button" data-registration-id="' + registration.id + '">Include in next CSV</button>' : (registration.payment_status === 'paid' ? '<button class="text-button mark-registration-exported" type="button" data-registration-id="' + registration.id + '">Mark as already exported</button>' : '')}<button class="text-button archive-registration" type="button" data-registration-id="${registration.id}" data-archived="${registration.admin_archived_at ? 'true' : 'false'}">${registration.admin_archived_at ? 'Restore registration' : 'Archive'}</button></div></td>
   </tr>`).join('');
 }
 
 function renderKitOrders() {
   const target = byId('kit-order-table');
+  byId('kit-orders-heading').textContent = showKitOrderHistory ? 'First aid kit order history' : 'First aid kit orders';
+  byId('kit-orders-description').textContent = showKitOrderHistory
+    ? 'Archived orders remain available here for reference.'
+    : 'Kit-only purchases are kept separate from course registrations and are not included in the ProTrainings CSV.';
+  byId('toggle-kit-order-history').textContent = showKitOrderHistory ? 'Show current orders' : 'Show order history';
   if (!kitOrders.length) {
-    target.innerHTML = '<tr><td colspan="4" class="empty-cell">No kit-only orders yet.</td></tr>';
+    target.innerHTML = `<tr><td colspan="5" class="empty-cell">${showKitOrderHistory ? 'No archived kit orders.' : 'No current kit-only orders.'}</td></tr>`;
     return;
   }
   target.innerHTML = kitOrders.map((order) => `<tr>
@@ -172,12 +193,17 @@ function renderKitOrders() {
     <td>${escapeHtml(dateTime(order.created_at + 'Z'))}</td>
     <td><strong>${money(order.amount_cents / 100)}</strong></td>
     <td><select class="kit-payment-status" data-order-id="${order.id}"><option value="awaiting_payment" ${order.payment_status === 'awaiting_payment' ? 'selected' : ''}>Awaiting payment</option><option value="paid" ${order.payment_status === 'paid' ? 'selected' : ''}>Paid</option><option value="refunded" ${order.payment_status === 'refunded' ? 'selected' : ''}>Refunded</option><option value="cancelled" ${order.payment_status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></td>
+    <td><button class="text-button archive-kit-order" type="button" data-order-id="${order.id}" data-archived="${order.admin_archived_at ? 'true' : 'false'}">${order.admin_archived_at ? 'Restore order' : 'Archive order'}</button></td>
   </tr>`).join('');
 }
 
 async function loadDashboard() {
   try {
-    [classes, registrations, kitOrders] = await Promise.all([api('/api/admin/classes'), api('/api/admin/registrations'), api('/api/admin/kit-orders')]);
+    [classes, registrations, kitOrders] = await Promise.all([
+      api(`/api/admin/classes${showClassHistory ? '?history=1' : ''}`),
+      api(`/api/admin/registrations${showRegistrationHistory ? '?history=1' : ''}`),
+      api(`/api/admin/kit-orders${showKitOrderHistory ? '?history=1' : ''}`),
+    ]);
     renderClasses();
     renderRegistrations();
     renderKitOrders();
@@ -234,6 +260,21 @@ byId('class-form').addEventListener('submit', async (event) => {
 
 byId('cancel-class-edit').addEventListener('click', resetClassForm);
 
+byId('toggle-class-history').addEventListener('click', async () => {
+  showClassHistory = !showClassHistory;
+  await loadDashboard();
+});
+
+byId('toggle-registration-history').addEventListener('click', async () => {
+  showRegistrationHistory = !showRegistrationHistory;
+  await loadDashboard();
+});
+
+byId('toggle-kit-order-history').addEventListener('click', async () => {
+  showKitOrderHistory = !showKitOrderHistory;
+  await loadDashboard();
+});
+
 byId('admin-class-list').addEventListener('change', async (event) => {
   const select = event.target.closest('.class-status');
   if (!select) return;
@@ -284,6 +325,17 @@ byId('admin-class-list').addEventListener('click', async (event) => {
     }
     return;
   }
+  const archiveButton = event.target.closest('.archive-class');
+  if (archiveButton) {
+    const archived = archiveButton.dataset.archived === 'true';
+    if (!archived && !window.confirm('Archive this class? It will be removed from the upcoming list but its records will be kept.')) return;
+    try {
+      await api(`/api/admin/classes/${archiveButton.dataset.classId}`, { method: 'PATCH', body: JSON.stringify({ archived: !archived }) });
+      message(archived ? 'Class restored to the upcoming list.' : 'Class archived. Its records were kept.');
+      await loadDashboard();
+    } catch (cause) { message(cause.message, true); }
+    return;
+  }
   const regenerateButton = event.target.closest('.regenerate-private-link');
   if (!regenerateButton) return;
   if (!window.confirm('Generate a new private link? Anyone using the current link will no longer be able to register.')) return;
@@ -309,6 +361,25 @@ byId('registrant-table').addEventListener('change', async (event) => {
   } catch (cause) { message(cause.message, true); }
 });
 
+byId('registrant-table').addEventListener('click', async (event) => {
+  const archiveButton = event.target.closest('.archive-registration');
+  const restoreExportButton = event.target.closest('.restore-registration-export');
+  const markExportedButton = event.target.closest('.mark-registration-exported');
+  if (!archiveButton && !restoreExportButton && !markExportedButton) return;
+  const registrationId = (archiveButton || restoreExportButton || markExportedButton).dataset.registrationId;
+  const archived = archiveButton?.dataset.archived === 'true';
+  if (archiveButton && !archived && !window.confirm('Archive this registration? It will be removed from the current dashboard but kept safely in history.')) return;
+  if (markExportedButton && !window.confirm('Mark this student as already exported to ProTrainings? They will not appear in the next CSV.')) return;
+  try {
+    await api(`/api/admin/registrations/${registrationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(archiveButton ? { archived: !archived } : (restoreExportButton ? { restoreProtrainingsExport: true } : { markProtrainingsExported: true })),
+    });
+    message(restoreExportButton ? 'Registration will be included in the next ProTrainings CSV.' : (markExportedButton ? 'Registration marked as exported to ProTrainings.' : (archived ? 'Registration restored.' : 'Registration archived.')));
+    await loadDashboard();
+  } catch (cause) { message(cause.message, true); }
+});
+
 byId('kit-order-table').addEventListener('change', async (event) => {
   const select = event.target.closest('.kit-payment-status');
   if (!select) return;
@@ -319,16 +390,33 @@ byId('kit-order-table').addEventListener('change', async (event) => {
   } catch (cause) { message(cause.message, true); }
 });
 
+byId('kit-order-table').addEventListener('click', async (event) => {
+  const archiveButton = event.target.closest('.archive-kit-order');
+  if (!archiveButton) return;
+  const archived = archiveButton.dataset.archived === 'true';
+  if (!archived && !window.confirm('Archive this kit order? It will be removed from the current dashboard but kept safely in history.')) return;
+  try {
+    await api(`/api/admin/kit-orders/${archiveButton.dataset.orderId}`, { method: 'PATCH', body: JSON.stringify({ archived: !archived }) });
+    message(archived ? 'Kit order restored.' : 'Kit order archived.');
+    await loadDashboard();
+  } catch (cause) { message(cause.message, true); }
+});
+
 byId('download-csv').addEventListener('click', async () => {
   try {
-    const response = await fetch(`${API_URL}/api/admin/export.csv`, { headers: { Authorization: `Bearer ${adminToken}` } });
-    if (!response.ok) throw new Error('Unable to create the CSV.');
+    const response = await fetch(`${API_URL}/api/admin/export.csv`, { method: 'POST', headers: { Authorization: `Bearer ${adminToken}` } });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Unable to create the CSV.');
+    }
     const blob = await response.blob();
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = 'protrainings-registrations.csv';
     link.click();
     URL.revokeObjectURL(link.href);
+    message('CSV downloaded. Included students were moved to export history.');
+    await loadDashboard();
   } catch (cause) { message(cause.message, true); }
 });
 

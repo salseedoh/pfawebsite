@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS classes (
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'cancelled')),
   visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private')),
   private_access_token TEXT UNIQUE,
+  admin_archived_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -43,11 +44,14 @@ CREATE TABLE IF NOT EXISTS registrations (
   paid_at TEXT,
   notes TEXT,
   virtual_join_token_hash TEXT UNIQUE,
-  virtual_join_token_issued_at TEXT
+  virtual_join_token_issued_at TEXT,
+  admin_archived_at TEXT,
+  protrainings_exported_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS registrations_class_id_idx ON registrations(class_id);
 CREATE INDEX IF NOT EXISTS registrations_payment_status_idx ON registrations(payment_status);
+CREATE INDEX IF NOT EXISTS registrations_protrainings_exported_at_idx ON registrations(protrainings_exported_at);
 
 CREATE TABLE IF NOT EXISTS kit_orders (
   id TEXT PRIMARY KEY,
@@ -74,7 +78,8 @@ CREATE TABLE IF NOT EXISTS kit_orders (
   admin_notification_attempts INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   paid_at TEXT,
-  notes TEXT
+  notes TEXT,
+  admin_archived_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS kit_orders_payment_status_idx ON kit_orders(payment_status);
