@@ -4,8 +4,14 @@
 .record-actions { display: grid; gap: 7px; justify-items: start; }
 .panel-heading h3 { margin-bottom: 4px; }
 .panel-heading p, .dashboard-intro { color: #527197; font-size: .9rem; }
-.class-form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; margin-top: 18px; align-items: end; }
+.class-form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 18px; align-items: end; }
 .class-form .button { align-self: center; justify-self: start; margin-top: 5px; }
+.kit-price-summary { align-self: end; min-height: 75px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: #f4f8f1; color: var(--ink); }
+.kit-price-summary strong, .kit-price-summary span, .kit-price-summary small { display: block; }
+.kit-price-summary span { margin: 2px 0; font: 700 1.25rem Fraunces, serif; }
+.kit-price-summary small { color: #527197; font-size: .78rem; }
+.class-form-options { grid-column: 1 / -1; margin: 0; }
+.class-option-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 20px; }
 .private-class-option { display: flex; align-items: flex-start; gap: 9px; padding: 10px 0; font-size: .84rem; line-height: 1.4; }
 .private-class-option input { width: auto; margin-top: 3px; }
 .private-class-option strong { display: block; color: var(--ink); }
@@ -20,9 +26,10 @@
 .private-class-tools .button { justify-self: start; }
 .private-badge { display: inline-block; padding: 3px 8px; border-radius: 99px; background: #edf3ff; color: #2456ab; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .virtual-badge { display: inline-block; padding: 3px 8px; border-radius: 99px; background: #e3f3ea; color: #247244; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.non-certification-badge { display: inline-block; padding: 3px 8px; border-radius: 99px; background: #fff1dc; color: #9a541d; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .virtual-classroom-frame { min-height: 520px; margin-top: 18px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #102b5b; }
 .virtual-classroom-frame iframe { display: block; border: 0; }
 .empty-state, .empty-cell { color: #527197; padding: 15px 0; }
 .muted { color: #5A7296; font-size: .82rem; }
 .form-error { color: #AD2E43; font-weight: 600; }
-@media (max-width: 780px) { .class-form { grid-template-columns: 1fr; } .admin-class-card { display: block; } .class-admin-actions { min-width: 0; margin-top: 16px; } .panel-heading { display: block; } .panel-heading .button, .panel-heading .text-button, .panel-actions { margin-top: 14px; } .panel-actions { justify-content: flex-start; } }
+@media (max-width: 780px) { .class-form, .class-option-grid { grid-template-columns: 1fr; } .admin-class-card { display: block; } .class-admin-actions { min-width: 0; margin-top: 16px; } .panel-heading { display: block; } .panel-heading .button, .panel-heading .text-button, .panel-actions { margin-top: 14px; } .panel-actions { justify-content: flex-start; } }

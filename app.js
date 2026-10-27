@@ -41,9 +41,13 @@ function renderClasses() {
   }
   classList.innerHTML = availableClasses.map((course) => {
     const duration = formatDuration(course.duration_minutes);
+    const nonCertificationNotice = course.is_non_certification
+      ? `<div class="non-certification-notice"><strong>Non-certification class</strong><details><summary aria-label="More information about this non-certification class">i</summary><p>This shortened class covers pet CPR, choking, and bleeding injuries. It does not include a certification. For a full certification class, please select one of our certification classes.</p></details></div>`
+      : '';
     return `<article class="class-card">
     <p class="date-label">${escapeHtml(dateOnly(course.starts_at))}</p>
     <h3>${escapeHtml(course.title)}</h3>
+    ${nonCertificationNotice}
     <p class="class-meta">${escapeHtml(classTime(course.starts_at))}<br>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}<br>Limited to ${course.max_students} students</p>
     <p><strong>${money(course.class_price)}</strong> per student</p>
     <button class="button register-button" data-class="${course.id}">Select this class</button>
@@ -116,9 +120,17 @@ function redirectToCheckout(result) {
 
 function showClassForm() {
   const duration = formatDuration(activeClass.duration_minutes);
-  content.innerHTML = `<p class="eyebrow">${activePrivateAccessToken ? 'Private class registration' : 'Reserve your place'}</p><h2 id="registration-title">${escapeHtml(activeClass.title)}</h2><p>${escapeHtml(dateOnly(activeClass.starts_at))} &middot; ${escapeHtml(classTime(activeClass.starts_at))}<br>${escapeHtml(activeClass.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p>
-    <form id="registration-form"><div class="form-grid"><label>Email*<input name="email" type="email" autocomplete="email" required><span class="email-delivery-note"><strong>Important:</strong> Check your inbox and spam/junk folder for updates from <strong>admin@preparedpaws.com</strong> and <strong>support@protrainings.com</strong>.</span></label><label>First name*<input name="firstName" autocomplete="given-name" required></label><label>Last name*<input name="lastName" autocomplete="family-name" required></label><p>Language: English</p></div>
-    <fieldset><legend>Would you like to add a pet first aid kit?</legend><label class="radio-option"><input type="radio" name="kit" value="no" checked><span><strong>Class only</strong>Course registration &middot; ${money(activeClass.class_price)}</span></label><label class="radio-option"><input type="radio" name="kit" value="yes"><span><strong>Class + first aid kit</strong>Course and kit &middot; ${money(activeClass.class_with_kit_price)}</span></label></fieldset><p class="form-note">Please review our <a href="policies.html#registration">class cancellation and refund policy</a> before payment.</p><div class="turnstile-widget"></div><button class="button" type="submit">Continue to payment</button><p class="form-note" id="registration-note" role="status">Your class information is saved before you are sent to secure payment.</p></form>`;
+  const isNonCertification = Boolean(activeClass.is_non_certification);
+  const nonCertificationNotice = isNonCertification
+    ? '<aside class="non-certification-notice non-certification-notice-large"><strong>Non-certification class</strong><p>This shortened class covers pet CPR, choking, and bleeding injuries. It does not include a certification. For a full certification class, please select one of our certification classes.</p></aside>'
+    : '';
+  const emailNotice = isNonCertification
+    ? '<span class="email-delivery-note"><strong>Important:</strong> Check your inbox and spam/junk folder for updates from <strong>admin@preparedpaws.com</strong>.</span>'
+    : '<span class="email-delivery-note"><strong>Important:</strong> Check your inbox and spam/junk folder for updates from <strong>admin@preparedpaws.com</strong> and <strong>support@protrainings.com</strong>.</span>';
+  const classOnlyLabel = isNonCertification ? 'Short class only' : 'Class only';
+  content.innerHTML = `<p class="eyebrow">${activePrivateAccessToken ? 'Private class registration' : 'Reserve your place'}</p><h2 id="registration-title">${escapeHtml(activeClass.title)}</h2><p>${escapeHtml(dateOnly(activeClass.starts_at))} &middot; ${escapeHtml(classTime(activeClass.starts_at))}<br>${escapeHtml(activeClass.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p>${nonCertificationNotice}
+    <form id="registration-form"><div class="form-grid"><label>Email*<input name="email" type="email" autocomplete="email" required>${emailNotice}</label><label>First name*<input name="firstName" autocomplete="given-name" required></label><label>Last name*<input name="lastName" autocomplete="family-name" required></label><p>Language: English</p></div>
+    <fieldset><legend>Would you like to add a pet first aid kit?</legend><label class="radio-option"><input type="radio" name="kit" value="no" checked><span><strong>${classOnlyLabel}</strong>Course registration &middot; ${money(activeClass.class_price)}</span></label><label class="radio-option"><input type="radio" name="kit" value="yes"><span><strong>Class + first aid kit</strong>Course and kit &middot; ${money(activeClass.class_with_kit_price)}</span></label></fieldset><p class="form-note">Please review our <a href="policies.html#registration">class cancellation and refund policy</a> before payment.</p><div class="turnstile-widget"></div><button class="button" type="submit">Continue to payment</button><p class="form-note" id="registration-note" role="status">Your class information is saved before you are sent to secure payment.</p></form>`;
   const form = document.getElementById('registration-form');
   form.addEventListener('submit', submitRegistration);
   renderTurnstile(form);

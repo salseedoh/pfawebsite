@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS classes (
   virtual_room_name TEXT UNIQUE,
   class_price_cents INTEGER NOT NULL DEFAULT 12500,
   class_with_kit_price_cents INTEGER NOT NULL DEFAULT 15000,
+  is_non_certification INTEGER NOT NULL DEFAULT 0 CHECK (is_non_certification IN (0, 1)),
   max_students INTEGER NOT NULL DEFAULT 10,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'cancelled')),
   visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private')),

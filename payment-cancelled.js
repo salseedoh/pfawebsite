@@ -1,4 +1,6 @@
-const API_URL = 'https://prepared-paws-api.salcido-heriberto.workers.dev';
+const API_URL = new URLSearchParams(window.location.search).get('environment') === 'test'
+  ? 'https://prepared-paws-api-test.salcido-heriberto.workers.dev'
+  : 'https://prepared-paws-api.salcido-heriberto.workers.dev';
 const details = new URLSearchParams(window.location.search);
 const orderId = details.get('order_id');
 const orderType = details.get('order_type');

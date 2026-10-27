@@ -51,7 +51,12 @@ async function authenticate(request, env) {
 }
 
 function mapClass(row) {
-  return { ...row, class_price: row.class_price_cents / 100, class_with_kit_price: row.class_with_kit_price_cents / 100 };
+  return {
+    ...row,
+    is_non_certification: Boolean(row.is_non_certification),
+    class_price: row.class_price_cents / 100,
+    class_with_kit_price: row.class_with_kit_price_cents / 100,
+  };
 }
 
 function publicClass(row) {
@@ -232,6 +237,12 @@ async function withinRateLimit(request, env, scope, maximum, windowMinutes, iden
 }
 
 const activeCheckoutSql = "(payment_status = 'paid' OR (payment_status = 'awaiting_payment' AND strftime('%s', COALESCE(checkout_expires_at, datetime(created_at, '+30 minutes'))) > strftime('%s', 'now')))";
+const CERTIFICATION_KIT_ADD_ON_CENTS = 2500;
+const NON_CERTIFICATION_KIT_ADD_ON_CENTS = 3000;
+
+function classWithKitPrice(classPriceCents, isNonCertification) {
+  return classPriceCents + (isNonCertification ? NON_CERTIFICATION_KIT_ADD_ON_CENTS : CERTIFICATION_KIT_ADD_ON_CENTS);
+}
 
 async function startCheckout(fields, table, orderId, env) {
   const checkout = await createStripeCheckoutSession(fields, env.STRIPE_SECRET_KEY);
@@ -241,6 +252,13 @@ async function startCheckout(fields, table, orderId, env) {
 }
 
 function checkoutFields({ orderId, email, amount, name, description, orderType, env }) {
+  const testSiteUrl = clean(env.PUBLIC_SITE_URL || 'https://preparedpaws.com').replace(/\/$/, '');
+  const successUrl = env.TEST_MODE === 'true'
+    ? `${testSiteUrl}/payment-success.html?environment=test&session_id={CHECKOUT_SESSION_ID}`
+    : CHECKOUT_SUCCESS_URL;
+  const cancelUrl = env.TEST_MODE === 'true'
+    ? `${testSiteUrl}/payment-cancelled.html?environment=test&${new URLSearchParams({ order_id: orderId, order_type: orderType })}`
+    : `${CHECKOUT_CANCEL_URL}?${new URLSearchParams({ order_id: orderId, order_type: orderType })}`;
   return {
     mode: 'payment',
     'excluded_payment_method_types[0]': 'us_bank_account',
@@ -248,8 +266,8 @@ function checkoutFields({ orderId, email, amount, name, description, orderType, 
     'excluded_payment_method_types[2]': 'affirm',
     'excluded_payment_method_types[3]': 'cashapp',
     'excluded_payment_method_types[4]': 'amazon_pay',
-    success_url: env.TEST_MODE === 'true' ? TEST_CHECKOUT_SUCCESS_URL : CHECKOUT_SUCCESS_URL,
-    cancel_url: `${CHECKOUT_CANCEL_URL}?${new URLSearchParams({ order_id: orderId, order_type: orderType })}`,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
     customer_email: email,
     client_reference_id: orderId,
     'metadata[order_id]': orderId,
@@ -266,11 +284,13 @@ function checkoutFields({ orderId, email, amount, name, description, orderType, 
 }
 
 async function registrationCheckout(registration, course, env) {
+  const isNonCertification = Boolean(course.is_non_certification);
+  const classLabel = isNonCertification ? 'Prepared Paws non-certification pet first aid class' : 'Prepared Paws pet first aid and CPR class';
   return startCheckout(checkoutFields({
     orderId: registration.id,
     email: registration.email,
     amount: registration.amount_cents,
-    name: registration.kit_selected ? 'Prepared Paws class and first aid kit' : 'Prepared Paws pet first aid and CPR class',
+    name: registration.kit_selected ? `${classLabel} and first aid kit` : classLabel,
     description: `${course.title} on ${course.starts_at}`,
     orderType: 'class_registration',
     env,
@@ -341,8 +361,8 @@ async function createKitOrder(request, env) {
 
 async function paymentStatus(env, sessionId) {
   if (!sessionId.startsWith('cs_')) return error('Payment session not found.', 404);
-  const registration = await env.DB.prepare('SELECT payment_status FROM registrations WHERE stripe_checkout_session_id = ?').bind(sessionId).first();
-  if (registration) return json({ orderType: 'class_registration', paymentStatus: registration.payment_status });
+  const registration = await env.DB.prepare('SELECT r.payment_status, c.is_non_certification FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.stripe_checkout_session_id = ?').bind(sessionId).first();
+  if (registration) return json({ orderType: 'class_registration', paymentStatus: registration.payment_status, isNonCertification: Boolean(registration.is_non_certification) });
   const kitOrder = await env.DB.prepare('SELECT payment_status FROM kit_orders WHERE stripe_checkout_session_id = ?').bind(sessionId).first();
   if (kitOrder) return json({ orderType: 'kit_order', paymentStatus: kitOrder.payment_status });
   return error('Payment session not found.', 404);
@@ -401,7 +421,7 @@ async function stripeWebhook(request, env) {
 
 async function sendConfirmationEmail(orderType, orderId, table, env) {
   const order = orderType === 'class_registration'
-    ? await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.duration_minutes AS class_duration_minutes, c.location AS class_location, c.virtual_join_url, c.is_virtual, c.virtual_room_name FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first()
+    ? await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.duration_minutes AS class_duration_minutes, c.location AS class_location, c.virtual_join_url, c.is_virtual, c.virtual_room_name, c.is_non_certification FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first()
     : await env.DB.prepare('SELECT * FROM kit_orders WHERE id = ?').bind(orderId).first();
   if (!order || order.confirmation_email_status === 'sent') return;
 
@@ -434,7 +454,7 @@ async function sendConfirmationEmail(orderType, orderId, table, env) {
 
 async function sendAdminOrderNotification(orderType, orderId, table, env) {
   const order = orderType === 'class_registration'
-    ? await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.duration_minutes AS class_duration_minutes, c.location AS class_location FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first()
+    ? await env.DB.prepare('SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.duration_minutes AS class_duration_minutes, c.location AS class_location, c.is_non_certification FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(orderId).first()
     : await env.DB.prepare('SELECT * FROM kit_orders WHERE id = ?').bind(orderId).first();
   if (!order || order.admin_notification_status === 'sent') return;
 
@@ -485,10 +505,12 @@ async function createClass(request, env) {
   const body = await request.json();
   const visibility = clean(body.visibility || 'public');
   const isVirtual = asBoolean(body.isVirtual);
-  const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), durationMinutes: Number(body.durationMinutes), location: clean(body.location), virtualJoinUrl: clean(body.virtualJoinUrl), isVirtual, virtualRoomName: isVirtual ? `prepared-paws-${id()}` : null, classPrice: Number(body.classPrice || 125) * 100, classWithKitPrice: Number(body.classWithKitPrice || 150) * 100, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open'), visibility, privateAccessToken: visibility === 'private' ? privateAccessToken() : null };
-  if (!course.title || !course.startsAt || !Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0 || !course.location || (course.virtualJoinUrl && !/^https:\/\//i.test(course.virtualJoinUrl)) || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
-  await env.DB.prepare('INSERT INTO classes (id, title, starts_at, duration_minutes, location, virtual_join_url, is_virtual, virtual_room_name, class_price_cents, class_with_kit_price_cents, max_students, status, visibility, private_access_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(course.id, course.title, course.startsAt, course.durationMinutes, course.location, course.virtualJoinUrl || null, course.isVirtual ? 1 : 0, course.virtualRoomName, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, course.visibility, course.privateAccessToken).run();
+  const isNonCertification = asBoolean(body.isNonCertification);
+  const classPrice = Math.round(Number(body.classPrice) * 100);
+  const course = { id: id(), title: clean(body.title), startsAt: clean(body.startsAt), durationMinutes: Number(body.durationMinutes), location: clean(body.location), virtualJoinUrl: clean(body.virtualJoinUrl), isVirtual, virtualRoomName: isVirtual ? `prepared-paws-${id()}` : null, classPrice, classWithKitPrice: classWithKitPrice(classPrice, isNonCertification), isNonCertification, maxStudents: Number(body.maxStudents || 10), status: clean(body.status || 'open'), visibility, privateAccessToken: visibility === 'private' ? privateAccessToken() : null };
+  if (!course.title || !course.startsAt || !Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0 || !course.location || (course.virtualJoinUrl && !/^https:\/\//i.test(course.virtualJoinUrl)) || !Number.isFinite(course.classPrice) || course.classPrice < 0 || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
+  await env.DB.prepare('INSERT INTO classes (id, title, starts_at, duration_minutes, location, virtual_join_url, is_virtual, virtual_room_name, class_price_cents, class_with_kit_price_cents, is_non_certification, max_students, status, visibility, private_access_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(course.id, course.title, course.startsAt, course.durationMinutes, course.location, course.virtualJoinUrl || null, course.isVirtual ? 1 : 0, course.virtualRoomName, course.classPrice, course.classWithKitPrice, course.isNonCertification ? 1 : 0, course.maxStudents, course.status, course.visibility, course.privateAccessToken).run();
   return json({ id: course.id, privateAccessToken: course.privateAccessToken }, 201);
 }
 
@@ -510,15 +532,16 @@ async function updateClass(request, env, classId) {
     isVirtual: body.isVirtual === undefined ? asBoolean(existing.is_virtual) : asBoolean(body.isVirtual),
     virtualRoomName: body.isVirtual === undefined ? existing.virtual_room_name : (asBoolean(body.isVirtual) ? (existing.virtual_room_name || `prepared-paws-${existing.id}`) : null),
     classPrice: Math.round(Number(body.classPrice ?? existing.class_price_cents / 100) * 100),
-    classWithKitPrice: Math.round(Number(body.classWithKitPrice ?? existing.class_with_kit_price_cents / 100) * 100),
+    isNonCertification: body.isNonCertification === undefined ? asBoolean(existing.is_non_certification) : asBoolean(body.isNonCertification),
     maxStudents: Number(body.maxStudents ?? existing.max_students),
     status: clean(body.status ?? existing.status),
     visibility: clean(body.visibility ?? existing.visibility ?? 'public'),
     privateAccessToken: asBoolean(body.regeneratePrivateLink) && (body.visibility ?? existing.visibility) === 'private' ? privateAccessToken() : existing.private_access_token
   };
-  if (!course.title || !course.startsAt || (course.durationMinutes !== null && (!Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0)) || !course.location || (course.virtualJoinUrl && !/^https:\/\//i.test(course.virtualJoinUrl)) || !Number.isFinite(course.classPrice) || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status) || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
-  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, duration_minutes = ?, location = ?, virtual_join_url = ?, is_virtual = ?, virtual_room_name = ?, class_price_cents = ?, class_with_kit_price_cents = ?, max_students = ?, status = ?, visibility = ?, private_access_token = ? WHERE id = ?')
-    .bind(course.title, course.startsAt, course.durationMinutes, course.location, course.virtualJoinUrl || null, course.isVirtual ? 1 : 0, course.virtualRoomName, course.classPrice, course.classWithKitPrice, course.maxStudents, course.status, course.visibility, course.visibility === 'private' ? course.privateAccessToken : null, classId).run();
+  course.classWithKitPrice = classWithKitPrice(course.classPrice, course.isNonCertification);
+  if (!course.title || !course.startsAt || (course.durationMinutes !== null && (!Number.isInteger(course.durationMinutes) || course.durationMinutes < 15 || course.durationMinutes % 15 !== 0)) || !course.location || (course.virtualJoinUrl && !/^https:\/\//i.test(course.virtualJoinUrl)) || !Number.isFinite(course.classPrice) || course.classPrice < 0 || !Number.isFinite(course.classWithKitPrice) || course.maxStudents < 6 || course.maxStudents > 10 || !['open', 'closed', 'cancelled'].includes(course.status) || !['public', 'private'].includes(course.visibility)) return error('Enter an expected class length in 15-minute increments. Class size must be between 6 and 10 students.');
+  await env.DB.prepare('UPDATE classes SET title = ?, starts_at = ?, duration_minutes = ?, location = ?, virtual_join_url = ?, is_virtual = ?, virtual_room_name = ?, class_price_cents = ?, class_with_kit_price_cents = ?, is_non_certification = ?, max_students = ?, status = ?, visibility = ?, private_access_token = ? WHERE id = ?')
+    .bind(course.title, course.startsAt, course.durationMinutes, course.location, course.virtualJoinUrl || null, course.isVirtual ? 1 : 0, course.virtualRoomName, course.classPrice, course.classWithKitPrice, course.isNonCertification ? 1 : 0, course.maxStudents, course.status, course.visibility, course.visibility === 'private' ? course.privateAccessToken : null, classId).run();
   return json({ ok: true, privateAccessToken: course.visibility === 'private' ? course.privateAccessToken : null });
 }
 
@@ -530,11 +553,13 @@ async function updateRegistration(request, env, registrationId) {
     return json({ ok: true });
   }
   if (body.restoreProtrainingsExport === true) {
+    const registration = await env.DB.prepare('SELECT c.is_non_certification FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.id = ?').bind(registrationId).first();
+    if (registration?.is_non_certification) return error('Non-certification classes are not exported to ProTrainings.', 400);
     await env.DB.prepare('UPDATE registrations SET protrainings_exported_at = NULL WHERE id = ?').bind(registrationId).run();
     return json({ ok: true });
   }
   if (body.markProtrainingsExported === true) {
-    const result = await env.DB.prepare("UPDATE registrations SET protrainings_exported_at = ? WHERE id = ? AND payment_status = 'paid'")
+    const result = await env.DB.prepare("UPDATE registrations SET protrainings_exported_at = ? WHERE id = ? AND payment_status = 'paid' AND class_id IN (SELECT id FROM classes WHERE is_non_certification = 0)")
       .bind(new Date().toISOString(), registrationId).run();
     if (!result.meta.changes) return error('Only paid registrations can be marked as exported.', 400);
     return json({ ok: true });
@@ -571,15 +596,14 @@ async function registrations(env, { classId = null, history = false } = {}) {
   if (history) filters.push('(r.admin_archived_at IS NOT NULL OR r.protrainings_exported_at IS NOT NULL)');
   else filters.push('r.admin_archived_at IS NULL', 'r.protrainings_exported_at IS NULL');
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const sql = `SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at FROM registrations r JOIN classes c ON c.id = r.class_id ${where} ORDER BY c.starts_at ASC, r.created_at ASC`;
+  const sql = `SELECT r.*, c.title AS class_title, c.starts_at AS class_starts_at, c.is_non_certification AS class_is_non_certification FROM registrations r JOIN classes c ON c.id = r.class_id ${where} ORDER BY c.starts_at ASC, r.created_at ASC`;
   const statement = env.DB.prepare(sql);
   const { results } = classId ? await statement.bind(classId).all() : await statement.all();
   return results;
 }
 
 async function exportProtrainingsCsv(env) {
-  const rows = await registrations(env);
-  const paidRows = rows.filter((row) => row.payment_status === 'paid');
+  const { results: paidRows } = await env.DB.prepare("SELECT r.* FROM registrations r JOIN classes c ON c.id = r.class_id WHERE r.admin_archived_at IS NULL AND r.protrainings_exported_at IS NULL AND r.payment_status = 'paid' AND c.is_non_certification = 0 ORDER BY c.starts_at ASC, r.created_at ASC").all();
   if (!paidRows.length) return error('There are no paid students ready to export.', 409);
   const exportedAt = new Date().toISOString();
   await env.DB.batch(paidRows.map((row) => env.DB.prepare('UPDATE registrations SET protrainings_exported_at = ? WHERE id = ? AND protrainings_exported_at IS NULL').bind(exportedAt, row.id)));

@@ -12,10 +12,12 @@ emailNotice.className = 'payment-email-notice';
 emailNotice.hidden = true;
 message.insertAdjacentElement('afterend', emailNotice);
 
-function setEmailNotice(orderType) {
+function setEmailNotice(orderType, isNonCertification = false) {
   emailNotice.innerHTML = orderType === 'kit_order'
     ? '<p><strong>Important email notice</strong></p><p>Your Stripe receipt and Prepared Paws order confirmation may arrive separately. Please check your inbox and spam/junk folder, and add <strong>admin@preparedpaws.com</strong> to your contacts so you do not miss important updates.</p>'
-    : '<p><strong>Important email notice</strong></p><p>Your Stripe receipt, Prepared Paws confirmation, and ProTrainings certificate email may arrive separately. Please check your inbox and spam/junk folder, and add <strong>admin@preparedpaws.com</strong> and <strong>support@protrainings.com</strong> to your contacts so you do not miss important updates.</p>';
+    : (isNonCertification
+      ? '<p><strong>Important email notice</strong></p><p>Your Stripe receipt and Prepared Paws confirmation may arrive separately. Please check your inbox and spam/junk folder, and add <strong>admin@preparedpaws.com</strong> to your contacts so you do not miss important updates.</p>'
+      : '<p><strong>Important email notice</strong></p><p>Your Stripe receipt, Prepared Paws confirmation, and ProTrainings certificate email may arrive separately. Please check your inbox and spam/junk folder, and add <strong>admin@preparedpaws.com</strong> and <strong>support@protrainings.com</strong> to your contacts so you do not miss important updates.</p>');
 }
 
 function finish(nextTitle, nextMessage, state = 'complete') {
@@ -37,7 +39,7 @@ async function checkPayment(attempt = 0) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Unable to confirm your payment.');
     if (result.paymentStatus === 'paid') {
-      setEmailNotice(result.orderType);
+      setEmailNotice(result.orderType, result.isNonCertification);
       const confirmation = result.orderType === 'kit_order'
         ? 'Your kit order is confirmed. Prepared Paws will contact you about local pickup.'
         : 'Your class registration is confirmed. Stripe will email your payment receipt.';

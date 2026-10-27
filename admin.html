@@ -44,11 +44,14 @@
           <label>Date and time (Central Time)<input name="startsAt" type="datetime-local" required></label>
           <label>Expected length (minutes)<input name="durationMinutes" type="number" min="15" step="15" placeholder="Example: 240" required></label>
           <label>Location<input name="location" placeholder="Class venue, or Online live class" required></label>
-          <label class="private-class-option"><input name="isVirtual" type="checkbox" value="true"><span><strong>Virtual live class</strong> Create a private Jitsi classroom. Paid students receive their own secure joining link.</span></label>
-          <label>Class price<input name="classPrice" type="number" min="0" step="0.01" value="125" required></label>
-          <label>Class + kit price<input name="classWithKitPrice" type="number" min="0" step="0.01" value="150" required></label>
+          <label>Base class price<input name="classPrice" type="number" min="0" step="0.01" value="125" required></label>
+          <div class="kit-price-summary" aria-live="polite"><strong>Class + first aid kit</strong><span id="class-with-kit-price">$150.00</span><small id="kit-add-on-note">Includes a $25 kit add-on.</small></div>
           <label>Maximum students<input name="maxStudents" type="number" min="6" max="10" value="10" required></label>
-          <label class="private-class-option"><input name="visibility" type="checkbox" value="private"><span><strong>Private class</strong> Hide this class from the public class list and create a shareable registration link.</span></label>
+          <fieldset class="class-form-options"><legend>Class options</legend><div class="class-option-grid">
+            <label class="private-class-option"><input name="isVirtual" type="checkbox" value="true"><span><strong>Virtual live class</strong> Create a private Jitsi classroom. Paid students receive their own secure joining link.</span></label>
+            <label class="private-class-option"><input name="visibility" type="checkbox" value="private"><span><strong>Private class</strong> Hide this class from the public class list and create a shareable registration link.</span></label>
+            <label class="private-class-option"><input name="isNonCertification" type="checkbox" value="true"><span><strong>Non-certification class</strong> A shortened class covering CPR, choking, and bleeding injuries. It does not include a certification.</span></label>
+          </div></fieldset>
           <button class="button" id="class-form-submit" type="submit">Publish class</button>
           <button class="text-button hidden" id="cancel-class-edit" type="button">Cancel editing</button>
         </form>

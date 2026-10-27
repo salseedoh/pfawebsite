@@ -16,6 +16,7 @@ let showKitOrderHistory = false;
 const byId = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
 const money = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+const kitAddOn = (isNonCertification) => isNonCertification ? 30 : 25;
 const dateTime = (value) => `${new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))} Central Time`;
 const formatDuration = (value) => {
   const minutes = Number(value);
@@ -36,14 +37,22 @@ const centralDateTimeInput = (value) => {
   return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 };
 
+function updateClassWithKitPrice() {
+  const form = byId('class-form');
+  const addOn = kitAddOn(form.isNonCertification.checked);
+  const basePrice = Number(form.classPrice.value);
+  byId('class-with-kit-price').textContent = Number.isFinite(basePrice) ? money(basePrice + addOn) : '—';
+  byId('kit-add-on-note').textContent = `Includes a $${addOn} kit add-on.`;
+}
+
 function resetClassForm() {
   const form = byId('class-form');
   editingClassId = null;
   form.reset();
   form.title.value = 'Pet First Aid & CPR';
   form.classPrice.value = '125';
-  form.classWithKitPrice.value = '150';
   form.maxStudents.value = '10';
+  updateClassWithKitPrice();
   byId('class-form-heading').textContent = 'Add a class';
   byId('class-form-description').textContent = 'Public classes appear on the website. Private classes are accessible only through their shareable registration link.';
   byId('class-form-submit').textContent = 'Publish class';
@@ -61,9 +70,10 @@ function startClassEdit(classId) {
   form.location.value = course.location || '';
   form.isVirtual.checked = Boolean(course.is_virtual);
   form.classPrice.value = course.class_price;
-  form.classWithKitPrice.value = course.class_with_kit_price;
+  form.isNonCertification.checked = Boolean(course.is_non_certification);
   form.maxStudents.value = course.max_students;
   form.visibility.checked = course.visibility === 'private';
+  updateClassWithKitPrice();
   byId('class-form-heading').textContent = 'Edit class';
   byId('class-form-description').textContent = 'Update the class details, then save your changes. Existing registrations and payments are not changed.';
   byId('class-form-submit').textContent = 'Save changes';
@@ -148,8 +158,9 @@ function renderClasses() {
     const duration = formatDuration(course.duration_minutes);
     const isPrivate = course.visibility === 'private';
     const isVirtual = Boolean(course.is_virtual);
+    const isNonCertification = Boolean(course.is_non_certification);
     return `<article class="admin-class-card">
-      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)} ${isPrivate ? '<span class="private-badge">Private</span>' : ''} ${isVirtual ? '<span class="virtual-badge">Virtual</span>' : ''}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${registrationCount} registrations</p></div>
+      <div><p class="date-label">${escapeHtml(dateTime(course.starts_at))}</p><h3>${escapeHtml(course.title)} ${isPrivate ? '<span class="private-badge">Private</span>' : ''} ${isVirtual ? '<span class="virtual-badge">Virtual</span>' : ''} ${isNonCertification ? '<span class="non-certification-badge">Non-certification</span>' : ''}</h3><p>${escapeHtml(course.location)}${duration ? `<br>Expected length: ${escapeHtml(duration)}` : ''}</p><p><strong>${paid} paid</strong> of ${course.max_students} maximum students &middot; ${registrationCount} registrations</p></div>
       <div class="class-admin-actions"><span>${money(course.class_price)} class &middot; ${money(course.class_with_kit_price)} with kit</span><button class="button button-small edit-class" type="button" data-class-id="${course.id}">Edit class</button>${isVirtual && !showClassHistory ? `<button class="button button-small launch-virtual-classroom" type="button" data-class-id="${course.id}">Launch virtual classroom</button>` : ''}${isPrivate ? `<div class="private-class-tools"><button class="button button-small copy-private-link" type="button" data-private-link="${escapeHtml(privateClassLink(course))}">Copy private link</button><button class="text-button regenerate-private-link" type="button" data-class-id="${course.id}">Generate new link</button></div>` : ''}<button class="text-button archive-class" type="button" data-class-id="${course.id}" data-archived="${course.admin_archived_at ? 'true' : 'false'}">${course.admin_archived_at ? 'Restore class' : 'Archive class'}</button><label>Status<select class="class-status" data-class-id="${course.id}"><option value="open" ${course.status === 'open' ? 'selected' : ''}>Open</option><option value="closed" ${course.status === 'closed' ? 'selected' : ''}>Closed</option><option value="cancelled" ${course.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label></div>
     </article>`;
   }).join('');
@@ -169,11 +180,11 @@ function renderRegistrations() {
   }
   target.innerHTML = registrations.map((registration) => `<tr>
     <td><strong>${escapeHtml(registration.first_name)} ${escapeHtml(registration.last_name)}</strong><br><span class="muted">${escapeHtml(registration.email)}</span></td>
-    <td>${escapeHtml(registration.class_title)}<br><span class="muted">${escapeHtml(dateTime(registration.class_starts_at))}</span></td>
+    <td>${escapeHtml(registration.class_title)}${registration.class_is_non_certification ? '<br><span class="non-certification-badge">Non-certification</span>' : ''}<br><span class="muted">${escapeHtml(dateTime(registration.class_starts_at))}</span></td>
     <td>${escapeHtml(registration.language)}</td>
     <td>${registration.kit_selected ? 'Class + kit' : 'Class only'}<br><strong>${money(registration.amount_cents / 100)}</strong></td>
     <td><select class="payment-status" data-registration-id="${registration.id}"><option value="awaiting_payment" ${registration.payment_status === 'awaiting_payment' ? 'selected' : ''}>Awaiting payment</option><option value="paid" ${registration.payment_status === 'paid' ? 'selected' : ''}>Paid</option><option value="refunded" ${registration.payment_status === 'refunded' ? 'selected' : ''}>Refunded</option><option value="cancelled" ${registration.payment_status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></td>
-    <td><div class="record-actions">${registration.protrainings_exported_at ? '<span class="muted">Exported to ProTrainings</span><button class="text-button restore-registration-export" type="button" data-registration-id="' + registration.id + '">Include in next CSV</button>' : (registration.payment_status === 'paid' ? '<button class="text-button mark-registration-exported" type="button" data-registration-id="' + registration.id + '">Mark as already exported</button>' : '')}<button class="text-button archive-registration" type="button" data-registration-id="${registration.id}" data-archived="${registration.admin_archived_at ? 'true' : 'false'}">${registration.admin_archived_at ? 'Restore registration' : 'Archive'}</button></div></td>
+    <td><div class="record-actions">${registration.class_is_non_certification ? '<span class="muted">Not sent to ProTrainings</span>' : (registration.protrainings_exported_at ? '<span class="muted">Exported to ProTrainings</span><button class="text-button restore-registration-export" type="button" data-registration-id="' + registration.id + '">Include in next CSV</button>' : (registration.payment_status === 'paid' ? '<button class="text-button mark-registration-exported" type="button" data-registration-id="' + registration.id + '">Mark as already exported</button>' : ''))}<button class="text-button archive-registration" type="button" data-registration-id="${registration.id}" data-archived="${registration.admin_archived_at ? 'true' : 'false'}">${registration.admin_archived_at ? 'Restore registration' : 'Archive'}</button></div></td>
   </tr>`).join('');
 }
 
@@ -248,7 +259,7 @@ byId('class-form').addEventListener('submit', async (event) => {
   const form = event.currentTarget;
   const values = Object.fromEntries(new FormData(form));
   const editing = Boolean(editingClassId);
-  const payload = { ...values, isVirtual: form.isVirtual.checked, visibility: form.visibility.checked ? 'private' : 'public', startsAt: new Date(values.startsAt).toISOString() };
+  const payload = { ...values, isVirtual: form.isVirtual.checked, isNonCertification: form.isNonCertification.checked, visibility: form.visibility.checked ? 'private' : 'public', startsAt: new Date(values.startsAt).toISOString() };
   try {
     message(editing ? 'Saving class changes...' : 'Publishing class...');
     const result = await api(editing ? `/api/admin/classes/${encodeURIComponent(editingClassId)}` : '/api/admin/classes', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
@@ -257,6 +268,9 @@ byId('class-form').addEventListener('submit', async (event) => {
     await loadDashboard();
   } catch (cause) { message(cause.message, true); }
 });
+
+byId('class-form').classPrice.addEventListener('input', updateClassWithKitPrice);
+byId('class-form').isNonCertification.addEventListener('change', updateClassWithKitPrice);
 
 byId('cancel-class-edit').addEventListener('click', resetClassForm);
 
