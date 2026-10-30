@@ -42,7 +42,7 @@ function renderClasses() {
   classList.innerHTML = availableClasses.map((course) => {
     const duration = formatDuration(course.duration_minutes);
     const nonCertificationNotice = course.is_non_certification
-      ? `<div class="non-certification-notice"><strong>Non-certification class</strong><details><summary aria-label="More information about this non-certification class">i</summary><p>This shortened class covers pet CPR, choking, and bleeding injuries. It does not include a certification. For a full certification class, please select one of our certification classes.</p></details></div>`
+      ? `<div class="non-certification-notice"><strong>Non-certification class</strong><details><summary aria-label="More information about this non-certification class">i</summary><p>This shortened general pet first aid class covers practical emergency-care topics and does not include certification.</p></details></div>`
       : '';
     return `<article class="class-card">
     <p class="date-label">${escapeHtml(dateOnly(course.starts_at))}</p>
@@ -122,7 +122,7 @@ function showClassForm() {
   const duration = formatDuration(activeClass.duration_minutes);
   const isNonCertification = Boolean(activeClass.is_non_certification);
   const nonCertificationNotice = isNonCertification
-    ? '<aside class="non-certification-notice non-certification-notice-large"><strong>Non-certification class</strong><p>This shortened class covers pet CPR, choking, and bleeding injuries. It does not include a certification. For a full certification class, please select one of our certification classes.</p></aside>'
+    ? '<aside class="non-certification-notice non-certification-notice-large"><strong>Non-certification class</strong><p>This shortened general pet first aid class covers practical emergency-care topics and does not include certification.</p></aside>'
     : '';
   const emailNotice = isNonCertification
     ? '<span class="email-delivery-note"><strong>Important:</strong> Check your inbox and spam/junk folder for updates from <strong>admin@preparedpaws.com</strong>.</span>'

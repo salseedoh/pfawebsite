@@ -73,7 +73,7 @@ function classEmail(registration) {
     ? (registration.kit_selected ? 'Your Prepared Paws Non-certification Class + Kit Is Confirmed' : 'Your Prepared Paws Non-certification Class Is Confirmed')
     : (registration.kit_selected ? 'Your Prepared Paws Class + Kit Is Confirmed' : 'Your Prepared Paws Class Is Confirmed');
   const certificationNotice = isNonCertification
-    ? '<p><strong>This is a non-certification class.</strong> It is a shortened class covering pet CPR, choking, and bleeding injuries. It does not include a certification or ProTrainings account.</p>'
+    ? '<p><strong>This is a non-certification class.</strong> This shortened general pet first aid class covers practical emergency-care topics and does not include certification or a ProTrainings account.</p>'
     : '<p>Watch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.</p>';
   const body = `<p style="margin-top:0;">Hi ${firstName},</p>
     <p>Thank you for registering with Prepared Paws. Your payment was received and your place is confirmed.</p>
@@ -97,7 +97,7 @@ function classEmail(registration) {
     ? (isVirtual ? '\n\nYour Prepared Paws first aid kit is included. We will contact you separately to arrange how you receive it.' : '\n\nYour Prepared Paws first aid kit will be provided when you arrive for class. There is no separate pickup needed.')
     : '';
   const certificationText = isNonCertification
-    ? 'This is a non-certification class. It is a shortened class covering pet CPR, choking, and bleeding injuries. It does not include a certification or ProTrainings account.'
+    ? 'This is a non-certification class. This shortened general pet first aid class covers practical emergency-care topics and does not include certification or a ProTrainings account.'
     : 'Watch for a separate email from ProTrainings within the next few days. It will include your username and password for the ProTrainings site, where you can download your certificate after completing the class.';
   const textBody = `Hi ${registration.first_name},\n\nThank you for registering with Prepared Paws. Your payment was received and your place is confirmed.\n\n${details}${isVirtual ? `\n\nJoin your virtual class: ${joinUrl}` : ''}\n\n${certificationText}\n\n${preparationText}${kitText}\n\nQuestions about your class? Reply to this email and our class team will be happy to help.\n\nPrepared Paws\n${WEBSITE_URL}`;
   return { subject, ...emailShell({ preview: 'Your Prepared Paws class registration is confirmed.', body, textBody }), replyTo: 'classes@preparedpaws.com' };
